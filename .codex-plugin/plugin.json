@@ -1,0 +1,15 @@
+{
+  "name": "codex-keep-awake",
+  "version": "0.1.0",
+  "description": "Prevents GNOME from suspending while Codex is doing active work.",
+  "author": {
+    "name": "Codex Keep Awake contributors"
+  },
+  "license": "MIT",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Codex Keep Awake",
+    "shortDescription": "Keep GNOME awake during active Codex work",
+    "longDescription": "Prevents GNOME from suspending while Codex is doing active work. GNOME is the enabled backend; the retained macOS and Windows helpers are inactive."
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "codex-keep-awake",
+  "interface": {
+    "displayName": "Codex Keep Awake"
+  },
+  "plugins": [
+    {
+      "name": "codex-keep-awake",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

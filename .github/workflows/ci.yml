@@ -10,13 +10,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
-      - run: npm ci || true
-      - run: node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
-      - run: node -e "JSON.parse(require('fs').readFileSync('.claude-plugin/plugin.json', 'utf8'))"
-      - run: node -e "JSON.parse(require('fs').readFileSync('hooks/hooks.json', 'utf8'))"
-      - run: bash -n scripts/keep-awake.sh
-      - run: bash -n scripts/stop-awake.sh
-      - run: bash -n scripts/pause-awake.sh
+      - run: npm ci --ignore-scripts --omit=optional --no-audit --no-fund
+      - run: npm test
+      - name: Validate Codex manifests and npm contents
+        run: npm run validate:package
 
   swift:
     runs-on: macos-latest
@@ -24,7 +21,26 @@ jobs:
       - uses: actions/checkout@v7
       - name: swiftc version
         run: swiftc --version
-      - name: Build daemon
-        run: swiftc -O src/keep-awake-daemon.swift -o /tmp/keep-awake-daemon
+      - name: Build macOS lease helper
+        run: swiftc -O src/macos-keep-awake.swift -o /tmp/macos-keep-awake
       - name: Verify binary is arm64 Mach-O
-        run: file /tmp/keep-awake-daemon | grep -E "Mach-O .* (arm64|x86_64)"
+        run: file /tmp/macos-keep-awake | grep -E "Mach-O .* (arm64|x86_64)"
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Parse Windows lease helper
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            "src/windows-keep-awake.ps1",
+            [ref] $tokens,
+            [ref] $errors
+          )
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Output $_.Message }
+            exit 1
+          }

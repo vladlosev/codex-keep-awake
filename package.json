@@ -1,20 +1,28 @@
 {
-  "name": "claude-keep-awake",
-  "version": "2.4.1",
-  "description": "Prevents your computer from sleeping while Claude Code is working; on Apple Silicon also blocks lid-close sleep (no sudo, no entitlements). macOS / Linux / Windows.",
-  "author": "AxGord <axgord@gmail.com> (https://github.com/AxGord)",
+  "name": "codex-keep-awake",
+  "version": "0.1.0",
+  "description": "Prevents GNOME from suspending while Codex is doing active work.",
+  "author": "Codex Keep Awake contributors",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/AxGord/claude-keep-awake.git"
-  },
-  "homepage": "https://github.com/AxGord/claude-keep-awake",
   "type": "module",
+  "bin": {
+    "codex-keep-awake": "./scripts/codex-keep-awake.js"
+  },
+  "scripts": {
+    "test": "node --test test/cli.test.js test/observer.test.js test/runtime.test.js test/state.test.js",
+    "validate:package": "node --test test/package.test.js",
+    "test:gnome": "node --test test/gnome-integration.test.js"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  },
   "files": [
+    "README.md",
+    "LICENSE",
+    ".codex-plugin/",
     "scripts/",
     "hooks/",
-    "src/",
-    ".claude-plugin/"
+    "src/"
   ],
   "engines": {
     "node": ">=18.0.0"
