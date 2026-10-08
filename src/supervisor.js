@@ -12,8 +12,7 @@ import {
 const READ_INTERVAL_MS = 1000;
 const CONNECT_RETRY_MS = 2000;
 export const FAILURE_RELEASE_MS = 60_000;
-const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const hookScript = path.join(pluginRoot, "scripts", "codex-keep-awake.js");
+const leaseScriptPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "lease.js");
 
 let stopped = false;
 let timer = null;
@@ -259,8 +258,7 @@ export function runSupervisor(directory, id, options = {}) {
     command: options.inhibitorCommand ?? process.env.CODEX_KEEP_AWAKE_GNOME_INHIBITOR ?? "gnome-session-inhibit",
     spawnProcess: options.spawnProcess,
     nodePath: process.execPath,
-    scriptPath: hookScript,
-    dataDirectory,
+    leaseScriptPath,
   });
   process.on("SIGTERM", finish);
   process.on("SIGINT", finish);

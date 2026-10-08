@@ -78,9 +78,15 @@ test("the npm archive contains the Codex runtime and excludes repository-only fi
     "src/backend.js",
     "src/cli.js",
     "src/hook-runtime.js",
+    "src/lease.js",
+    "src/lease-backend.js",
     "src/macos-keep-awake.swift",
+    "src/opencode-activity.js",
+    "src/opencode-backend.js",
+    "src/opencode-plugin.js",
     "src/state.js",
     "src/supervisor.js",
+    "src/windows-backend.js",
     "src/windows-keep-awake.ps1",
   ]) assert.ok(paths.has(expected), `npm archive is missing ${expected}`);
 

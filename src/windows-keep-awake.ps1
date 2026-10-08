@@ -13,7 +13,7 @@ public static class CodexKeepAwakePower
 Add-Type -TypeDefinition $nativeSource
 
 $continuous = [uint32]2147483648
-$active = [uint32]2147483651
+$active = [uint32]2147483649
 $acquired = $false
 
 try {
@@ -22,6 +22,9 @@ try {
         throw "SetThreadExecutionState failed with Windows error $errorCode"
     }
     $acquired = $true
+
+    [Console]::Out.WriteLine("CODEX_KEEP_AWAKE_LEASE_READY")
+    [Console]::Out.Flush()
 
     while ($null -ne [Console]::In.ReadLine()) { }
 }

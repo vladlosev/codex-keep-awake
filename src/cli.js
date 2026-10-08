@@ -5,7 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { handleHook } from "./hook-runtime.js";
-import { LEASE_READY_LINE } from "./backend.js";
 import {
   ensurePrivateDirectory,
   processIdentityIsAlive,
@@ -13,6 +12,7 @@ import {
   withLockedState,
 } from "./state.js";
 import { runSupervisor } from "./supervisor.js";
+import { runLease } from "./lease.js";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const pluginRoot = process.env.PLUGIN_ROOT || path.resolve(scriptDirectory, "..");
@@ -113,14 +113,6 @@ async function handleHookCommand(dataDirectory) {
   }
 }
 
-async function waitForLeaseEnd() {
-  process.stdout.write(`${LEASE_READY_LINE}\n`);
-  for await (const _chunk of process.stdin) {
-    // The parent supervisor keeps this pipe open for the entire protection
-    // lease. EOF means the inhibitor should release and exit.
-  }
-}
-
 function status(dataDirectory) {
   const state = readState(dataDirectory);
   const supervisorRunning = processIdentityIsAlive(state.supervisor);
@@ -190,7 +182,7 @@ export async function main(args = process.argv.slice(2)) {
     if (!instanceId) throw new Error("The supervisor can only be started by the hook runtime");
     runSupervisor(dataDirectory, instanceId);
   } else if (command === "lease") {
-    await waitForLeaseEnd();
+    await runLease();
   } else {
     throw new Error("Usage: codex-keep-awake <setup|hook|status|cleanup>");
   }

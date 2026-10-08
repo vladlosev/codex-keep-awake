@@ -166,9 +166,7 @@ rm -f '${markerPath}'
       "--inhibit", "suspend",
       "--reason", "Codex is running active work",
       process.execPath,
-      cliPath,
-      "lease",
-      "--data-dir", dataDir,
+      path.join(repoRoot, "src", "lease.js"),
     ]);
 
     const approvalStartedAt = Date.now();
