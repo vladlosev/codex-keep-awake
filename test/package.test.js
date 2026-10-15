@@ -82,6 +82,7 @@ test("the npm archive contains the Codex runtime and excludes repository-only fi
     "src/backend.js",
     "src/cli.js",
     "src/hook-runtime.js",
+    "src/installed-plugin.js",
     "src/lease.js",
     "src/lease-backend.js",
     "src/macos-keep-awake.swift",

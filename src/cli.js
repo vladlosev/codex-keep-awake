@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { handleHook } from "./hook-runtime.js";
+import { runInstalledPluginCommand } from "./installed-plugin.js";
 import {
   ensurePrivateDirectory,
   processIdentityIsAlive,
@@ -30,12 +31,13 @@ function parseArguments(args) {
       positional.push(value);
     }
   }
+  const hasDataDirectory = Boolean(dataDirectory);
   if (!dataDirectory) {
     dataDirectory = process.platform === "win32" && process.env.LOCALAPPDATA
       ? path.join(process.env.LOCALAPPDATA, "Codex", "KeepAwake")
       : path.join(os.homedir(), ".local", "share", "codex-keep-awake");
   }
-  return { positional, dataDirectory: path.resolve(dataDirectory) };
+  return { positional, dataDirectory: path.resolve(dataDirectory), hasDataDirectory };
 }
 
 function writeJson(value) {
@@ -130,8 +132,12 @@ export async function main(args = process.argv.slice(2)) {
   if (major !== 24 || minor < 17 || typeof globalThis.WebSocket !== "function") {
     throw new Error("Node.js 24.17.0 or newer in the Node 24 series with the built-in WebSocket enabled is required");
   }
-  const { positional, dataDirectory } = parseArguments(args);
+  const { positional, dataDirectory, hasDataDirectory } = parseArguments(args);
   const command = positional.shift();
+  if ((command === "status" || command === "cleanup") && !hasDataDirectory) {
+    runInstalledPluginCommand(command);
+    return;
+  }
   if (command === "setup") {
     // Retain the old setup command for users with an earlier setup advisory.
     ensurePrivateDirectory(dataDirectory);

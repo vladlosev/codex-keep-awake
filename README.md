@@ -12,11 +12,10 @@ requirement. Other desktop environments are not supported.
 
 ## Install in Codex CLI
 
-To install from a GitHub repository containing this marketplace, replace
-`OWNER` with its account or organization:
+Add the GitHub repository as a marketplace, then install the plugin:
 
 ```sh
-codex plugin marketplace add OWNER/codex-keep-awake
+codex plugin marketplace add vladlosev/codex-keep-awake
 codex plugin add codex-keep-awake@codex-keep-awake
 ```
 
@@ -41,43 +40,27 @@ plugin and marketplace names, it is normally
 `~/.codex/plugins/data/codex-keep-awake-codex-keep-awake`; replace `~/.codex`
 with your `CODEX_HOME` if customized.
 
-Copy and paste this block to locate the installed plugin and inspect its
-state. It reads the installed version from
-[`codex plugin list --json`](https://learn.chatgpt.com/docs/cli/reference#codex-plugin)
-and uses your `CODEX_HOME`, or `~/.codex` by default. It requires no additional
-tools beyond Codex and Node.js:
+For optional terminal commands, install the CLI from the same GitHub repository:
 
 ```sh
-keep_awake_home="${CODEX_HOME:-$HOME/.codex}"
-keep_awake_version="$(
-  codex plugin list --marketplace codex-keep-awake --json |
-    node -e '
-      const fs = require("node:fs");
-      const plugin = JSON.parse(fs.readFileSync(0, "utf8")).installed
-        .find(p => p.name === "codex-keep-awake");
-      if (!plugin) {
-        console.error("Install codex-keep-awake@codex-keep-awake first.");
-        process.exit(1);
-      }
-      console.log(plugin.version);
-    '
-)"
-keep_awake_root="$keep_awake_home/plugins/cache/codex-keep-awake/codex-keep-awake/$keep_awake_version"
-keep_awake_data="$keep_awake_home/plugins/data/codex-keep-awake-codex-keep-awake"
-node "$keep_awake_root/scripts/codex-keep-awake.js" status --data-dir "$keep_awake_data"
+npm install --global --ignore-scripts --allow-git=all vladlosev/codex-keep-awake
 ```
 
-To clean up, run this command in the same terminal after the block above:
+Then run either command from any directory:
 
 ```sh
-node "$keep_awake_root/scripts/codex-keep-awake.js" cleanup --data-dir "$keep_awake_data"
+codex-keep-awake status
+codex-keep-awake cleanup
 ```
 
-Both commands emit JSON describing the plugin's current state or the result of
-cleanup.
+The commands locate the active installed plugin automatically and use your
+`CODEX_HOME`, or `~/.codex` by default. Codex must be on `PATH`, and the plugin
+must already be installed. Both commands emit JSON describing the plugin's
+current state or the result of cleanup.
 
-`cleanup` stops the plugin's background process and releases suspend
-protection. A later hook can start it again.
+`status` is read-only. `cleanup` resets the plugin's runtime bookkeeping and
+asks its background process to stop and release suspend protection. It leaves
+the private data directory in place. A later hook can start protection again.
 
 ## Remove the plugin
 
@@ -91,6 +74,12 @@ codex plugin marketplace remove codex-keep-awake
 
 Removing a plugin does not delete its private data directory. You can delete
 that directory after cleanup has stopped the plugin.
+
+If you installed the optional terminal commands, remove them with:
+
+```sh
+npm uninstall --global codex-keep-awake
+```
 
 ## Operation and limits
 

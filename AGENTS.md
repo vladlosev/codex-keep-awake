@@ -42,6 +42,23 @@ for normal operation, inspection, cleanup, and removal.
 GitHub marketplace installation includes the runtime directly and does not
 require publishing to npm.
 
+## Try the terminal commands from this checkout
+
+Install the package's CLI into npm's global command directory:
+
+```sh
+npm install --global --ignore-scripts .
+```
+
+The `codex-keep-awake status` and `codex-keep-awake cleanup` commands can then
+run from any directory. They query `codex plugin list --json` and invoke the
+active cached plugin version with its private data directory. Install the
+Codex plugin separately using the local marketplace instructions above.
+
+An explicit `--data-dir` argument or `PLUGIN_DATA` environment variable bypasses
+discovery and operates directly on that directory. Tests must isolate both
+`CODEX_HOME` and the default home-directory fallback when testing discovery.
+
 ## Use from OpenCode CLI in this checkout
 
 This checkout includes a project-local OpenCode V1 plugin in
