@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, openSync, writeFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,9 +71,6 @@ test("concurrent hooks share one supervisor and ignore a stale Stop", async () =
   const fakeBin = path.join(dataDir, "bin");
   const environment = {};
   try {
-    await writeFile(path.join(dataDir, "package.json"), '{"type":"module"}\n');
-    await writeFile(path.join(dataDir, "package-lock.json"), "{}\n");
-    await symlink(path.join(repoRoot, "node_modules"), path.join(dataDir, "node_modules"), "dir");
     await mkdir(fakeBin);
     const fakeInhibitor = path.join(fakeBin, "gnome-session-inhibit");
     await writeFile(fakeInhibitor, "#!/bin/sh\ncat >/dev/null\n");

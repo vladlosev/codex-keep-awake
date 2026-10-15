@@ -28,7 +28,11 @@ test("Codex package, plugin, marketplace, and locked dependency metadata agree",
     [pkg.name, { source: "local", path: "./" }],
   ]);
   assert.equal(lock.packages["node_modules/ws"].version, "8.22.0");
-  assert.equal(pkg.dependencies.ws, "8.22.0");
+  assert.deepEqual(pkg.dependencies ?? {}, {});
+  assert.equal(pkg.devDependencies.ws, "8.22.0");
+  assert.equal(lock.packages["node_modules/ws"].dev, true);
+  assert.equal(pkg.engines.node, "^24.17.0");
+  assert.equal(lock.packages[""].engines.node, pkg.engines.node);
 });
 
 test("every Codex hook uses the bounded advisory runtime", () => {
@@ -86,6 +90,7 @@ test("the npm archive contains the Codex runtime and excludes repository-only fi
     "src/opencode-plugin.js",
     "src/state.js",
     "src/supervisor.js",
+    "src/unix-websocket.js",
     "src/windows-backend.js",
     "src/windows-keep-awake.ps1",
   ]) assert.ok(paths.has(expected), `npm archive is missing ${expected}`);

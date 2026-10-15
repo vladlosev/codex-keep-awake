@@ -5,11 +5,14 @@ on: [push, pull_request]
 jobs:
   validate:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['24.17.0', '24']
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node-version }}
       - run: npm ci --ignore-scripts --omit=optional --no-audit --no-fund
       - run: npm test
       - name: Validate Codex manifests and npm contents

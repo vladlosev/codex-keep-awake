@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { createRequire } from "node:module";
 import path from "node:path";
+import { createUnixWebSocket } from "./unix-websocket.js";
 
 const REQUEST_TIMEOUT_MS = 900;
 const CONNECT_TIMEOUT_MS = 1000;
@@ -32,24 +32,17 @@ export function discoverSocketPath({
   return metadata.socketPath;
 }
 
-function websocketConstructor(dataDirectory) {
-  const requireFromData = createRequire(path.join(dataDirectory, "package.json"));
-  const WebSocket = requireFromData("ws");
-  return WebSocket.default ?? WebSocket;
-}
-
 export class AppServerObserver {
-  constructor(dataDirectory, {
+  constructor({
     discover = discoverSocketPath,
-    WebSocket = websocketConstructor(dataDirectory),
     requestTimeoutMs = REQUEST_TIMEOUT_MS,
     connectTimeoutMs = CONNECT_TIMEOUT_MS,
   } = {}) {
     this.discover = discover;
-    this.WebSocket = WebSocket;
     this.requestTimeoutMs = requestTimeoutMs;
     this.connectTimeoutMs = connectTimeoutMs;
     this.socket = null;
+    this.connection = null;
     this.socketPath = null;
     this.nextRequestId = 1;
     this.pending = new Map();
@@ -61,32 +54,39 @@ export class AppServerObserver {
   async connect() {
     if (this.connected) return;
     if (this.connecting) return this.connecting;
-    this.connecting = this.connectOnce().finally(() => { this.connecting = null; });
+    this.connecting = this.connectOnce().catch((error) => {
+      this.lastError = error.message;
+      this.close();
+      throw error;
+    }).finally(() => { this.connecting = null; });
     return this.connecting;
   }
 
   async connectOnce() {
     this.socketPath = this.discover();
-    const socket = new this.WebSocket(`ws+unix://${this.socketPath}:/`, {
+    const connection = createUnixWebSocket(this.socketPath, {
       handshakeTimeout: this.connectTimeoutMs,
-      perMessageDeflate: false,
       maxPayload: 1024 * 1024,
     });
+    const { socket } = connection;
     this.socket = socket;
-    socket.on("message", (data) => this.onMessage(data, socket));
-    socket.on("error", (error) => this.onSocketError(error, socket));
-    socket.on("close", () => this.onSocketClose(socket));
+    this.connection = connection;
+    socket.addEventListener("message", ({ data }) => this.onMessage(data, socket));
+    socket.addEventListener("error", (event) => this.onSocketError(event.error, socket));
+    socket.addEventListener("close", () => this.onSocketClose(socket));
 
     await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Timed out connecting to the Codex app-server socket")), this.connectTimeoutMs);
-      socket.once("open", () => {
-        clearTimeout(timeout);
-        resolve();
-      });
-      socket.once("error", (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
+      const clear = () => {
+        socket.removeEventListener("open", opened);
+        socket.removeEventListener("error", failed);
+        socket.removeEventListener("close", closed);
+      };
+      const opened = () => { clear(); resolve(); };
+      const failed = (event) => { clear(); reject(event.error ?? new Error("Codex app-server connection failed")); };
+      const closed = () => { clear(); reject(new Error("Codex app-server connection closed")); };
+      socket.addEventListener("open", opened);
+      socket.addEventListener("error", failed);
+      socket.addEventListener("close", closed);
     });
 
     const response = await this.request("initialize", {
@@ -99,15 +99,19 @@ export class AppServerObserver {
     if (!response || typeof response !== "object") {
       throw new Error("Codex app-server returned an invalid initialize response");
     }
+    if (socket !== this.socket || socket.readyState !== WebSocket.OPEN) {
+      throw new Error("Codex app-server connection closed during initialization");
+    }
     socket.send(JSON.stringify({ method: "initialized", params: {} }));
     this.connected = true;
     this.lastError = null;
   }
 
   onMessage(data, socket) {
+    if (socket !== this.socket) return;
     let message;
     try {
-      message = JSON.parse(data.toString());
+      message = JSON.parse(typeof data === "string" ? data : Buffer.from(data).toString("utf8"));
     } catch {
       this.onSocketError(new Error("Codex app-server returned malformed JSON"), socket);
       return;
@@ -138,13 +142,14 @@ export class AppServerObserver {
       pending.reject(new Error(this.lastError));
     }
     this.pending.clear();
-    if (this.socket && this.socket.readyState < this.WebSocket.CLOSING) this.socket.terminate();
+    this.connection?.terminate();
   }
 
   onSocketClose(socket = this.socket) {
     if (socket !== this.socket) return;
     this.connected = false;
     this.socket = null;
+    this.connection = null;
     const closeError = this.lastError || "Codex app-server connection closed";
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timeout);
@@ -154,7 +159,7 @@ export class AppServerObserver {
   }
 
   request(method, params) {
-    if (!this.socket || this.socket.readyState !== this.WebSocket.OPEN) {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("Codex app-server is not connected"));
     }
     const id = this.nextRequestId++;
@@ -194,9 +199,10 @@ export class AppServerObserver {
 
   close() {
     this.connected = false;
-    const socket = this.socket;
+    const connection = this.connection;
     this.socket = null;
-    if (socket && socket.readyState < this.WebSocket.CLOSING) socket.terminate();
+    this.connection = null;
+    connection?.terminate();
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timeout);
       pending.reject(new Error("Codex app-server connection closed"));

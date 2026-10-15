@@ -1,4 +1,3 @@
-import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -10,11 +9,6 @@ import {
 } from "./state.js";
 
 const waitCell = new Int32Array(new SharedArrayBuffer(4));
-
-export function loadWebSocket(dataDirectory) {
-  const requireFromData = createRequire(path.join(dataDirectory, "package.json"));
-  return requireFromData("ws");
-}
 
 function launchSupervisor(dataDirectory, pluginRoot) {
   const instanceId = randomUUID();

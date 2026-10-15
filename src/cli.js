@@ -1,6 +1,3 @@
-import { spawnSync } from "node:child_process";
-import { copyFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +13,6 @@ import { runLease } from "./lease.js";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const pluginRoot = process.env.PLUGIN_ROOT || path.resolve(scriptDirectory, "..");
-const executablePath = path.join(pluginRoot, "scripts", "codex-keep-awake.js");
 
 function parseArguments(args) {
   const positional = [];
@@ -42,14 +38,6 @@ function parseArguments(args) {
   return { positional, dataDirectory: path.resolve(dataDirectory) };
 }
 
-export function shellQuote(value) {
-  return `'${String(value).replaceAll("'", "'\\''")}'`;
-}
-
-function setupCommand(dataDirectory) {
-  return `${shellQuote(process.execPath)} ${shellQuote(executablePath)} setup --data-dir ${shellQuote(dataDirectory)}`;
-}
-
 function writeJson(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
@@ -65,24 +53,6 @@ async function readStdin(limit = 1024 * 1024) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function installDependencies(dataDirectory) {
-  ensurePrivateDirectory(dataDirectory);
-  copyFileSync(path.join(pluginRoot, "package.json"), path.join(dataDirectory, "package.json"));
-  copyFileSync(path.join(pluginRoot, "package-lock.json"), path.join(dataDirectory, "package-lock.json"));
-  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-  const result = spawnSync(npm, [
-    "ci", "--ignore-scripts", "--omit=optional", "--no-audit", "--no-fund",
-  ], {
-    cwd: dataDirectory,
-    stdio: "inherit",
-    windowsHide: true,
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`npm ci exited with status ${result.status ?? "unknown"}`);
-  const requireFromData = createRequire(path.join(dataDirectory, "package.json"));
-  requireFromData("ws");
-}
-
 async function handleHookCommand(dataDirectory) {
   let event;
   try {
@@ -92,16 +62,6 @@ async function handleHookCommand(dataDirectory) {
     // Codex hooks are advisory. Invalid input must not block the requested
     // operation or print content that could contain prompts.
     writeJson({});
-    return;
-  }
-
-  try {
-    const requireFromData = createRequire(path.join(dataDirectory, "package.json"));
-    requireFromData("ws");
-  } catch {
-    writeJson({
-      systemMessage: `Codex Keep Awake needs its locked runtime dependencies. Run this command: ${setupCommand(dataDirectory)}`,
-    });
     return;
   }
 
@@ -166,11 +126,16 @@ function cleanup(dataDirectory) {
 }
 
 export async function main(args = process.argv.slice(2)) {
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  if (major !== 24 || minor < 17 || typeof globalThis.WebSocket !== "function") {
+    throw new Error("Node.js 24.17.0 or newer in the Node 24 series with the built-in WebSocket enabled is required");
+  }
   const { positional, dataDirectory } = parseArguments(args);
   const command = positional.shift();
   if (command === "setup") {
-    installDependencies(dataDirectory);
-    process.stdout.write(`Installed locked runtime dependencies in ${dataDirectory}\n`);
+    // Retain the old setup command for users with an earlier setup advisory.
+    ensurePrivateDirectory(dataDirectory);
+    process.stdout.write(`Ready: no runtime dependencies to install. State directory: ${dataDirectory}\n`);
   } else if (command === "hook") {
     await handleHookCommand(dataDirectory);
   } else if (command === "status") {

@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { closeSync, openSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -78,6 +78,7 @@ async function startProtocolServer(socketPath, respond) {
     server.listen(socketPath, resolve);
   });
   return {
+    clients: webSockets.clients,
     async close() {
       for (const socket of webSockets.clients) socket.terminate();
       await new Promise((resolve) => server.close(resolve));
@@ -104,9 +105,6 @@ test("app-server waits release GNOME leases and resume before a completion hook"
   const markerPath = path.join(dataDir, "inhibitor.active");
   const argsPath = path.join(dataDir, "inhibitor.args.txt");
   const pidPath = path.join(dataDir, "inhibitor.pid");
-  await writeFile(path.join(dataDir, "package.json"), '{"type":"module"}\n');
-  await writeFile(path.join(dataDir, "package-lock.json"), "{}\n");
-  await symlink(path.join(repoRoot, "node_modules"), path.join(dataDir, "node_modules"), "dir");
   await mkdir(fakeBin);
 
   const inhibitorScript = path.join(fakeBin, "gnome-session-inhibit");
@@ -221,9 +219,7 @@ rm -f '${markerPath}'
 test("observer reconnects to a replaced Unix socket and detects malformed responses", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "codex-keep-awake-reconnect-"));
   const socketPath = path.join(dataDir, "app-server.sock");
-  await writeFile(path.join(dataDir, "package.json"), '{"type":"module"}\n');
-  await symlink(path.join(repoRoot, "node_modules"), path.join(dataDir, "node_modules"), "dir");
-  const observer = new AppServerObserver(dataDir, { discover: () => socketPath });
+  const observer = new AppServerObserver({ discover: () => socketPath });
   let activeServer = null;
   try {
     activeServer = await startProtocolServer(socketPath, (webSocket, message) => respondToRead(webSocket, message));
@@ -266,13 +262,54 @@ test("observer reconnects to a replaced Unix socket and detects malformed respon
   }
 });
 
+test("failed initialization closes the native transport before a retry", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "codex-keep-awake-initialize-"));
+  const socketPath = path.join(directory, "server.sock");
+  let responding = false;
+  const server = await startProtocolServer(socketPath, (socket, message) => {
+    if (responding) respondToRead(socket, message);
+  });
+  const observer = new AppServerObserver({ discover: () => socketPath, requestTimeoutMs: 80 });
+  try {
+    await assert.rejects(observer.connect(), /initialize request timed out/);
+    assert.equal(observer.connected, false);
+    assert.equal(observer.socket, null);
+    assert.equal(await waitFor(async () => server.clients.size, (count) => count === 0), 0);
+    responding = true;
+    await observer.connect();
+    assert.equal((await observer.readThreads(["thread-retry"]))[0].status.type, "active");
+  } finally {
+    observer.close();
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("the observer accepts binary JSON responses from the native client", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "codex-keep-awake-binary-"));
+  const socketPath = path.join(directory, "server.sock");
+  const server = await startProtocolServer(socketPath, (socket, message) => {
+    if (message.method === "initialized") return;
+    const result = message.method === "initialize"
+      ? { serverInfo: { name: "fake-codex" } }
+      : { thread: { id: message.params.threadId, status: { type: "idle" } } };
+    socket.send(Buffer.from(JSON.stringify({ id: message.id, result })));
+  });
+  const observer = new AppServerObserver({ discover: () => socketPath });
+  try {
+    await observer.connect();
+    assert.equal((await observer.readThreads(["thread-binary"]))[0].status.type, "idle");
+  } finally {
+    observer.close();
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("an unobservable session uses hooks and reports unavailable automatic wait handling", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "codex-keep-awake-no-daemon-"));
   const fakeBin = path.join(dataDir, "bin");
   const markerPath = path.join(dataDir, "inhibitor.active");
-  await writeFile(path.join(dataDir, "package.json"), '{"type":"module"}\n');
-  await writeFile(path.join(dataDir, "package-lock.json"), "{}\n");
-  await symlink(path.join(repoRoot, "node_modules"), path.join(dataDir, "node_modules"), "dir");
   await mkdir(fakeBin);
   const inhibitorScript = path.join(fakeBin, "gnome-session-inhibit");
   await writeFile(inhibitorScript, `#!/bin/sh

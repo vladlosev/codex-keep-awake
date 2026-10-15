@@ -4,7 +4,6 @@ import { statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { shellQuote } from "../src/cli.js";
 import { FAILURE_RELEASE_MS, requiredByState } from "../src/supervisor.js";
 import {
   applyHookEvent,
@@ -120,6 +119,3 @@ test("lost observation releases after sixty seconds while daemonless hook fallba
   assert.equal(requiredByState(state, now + (FAILURE_RELEASE_MS * 3)), true);
 });
 
-test("shell quoting preserves spaces and embedded single quotes", () => {
-  assert.equal(shellQuote("/tmp/Codex Keep Awake's Plugin"), "'/tmp/Codex Keep Awake'\\''s Plugin'");
-});

@@ -253,7 +253,7 @@ export function runSupervisor(directory, id, options = {}) {
   dataDirectory = directory;
   instanceId = id;
   startupGraceUntil = Date.now() + 1000;
-  observer = options.observer ?? new AppServerObserver(dataDirectory, options.observerOptions);
+  observer = options.observer ?? new AppServerObserver(options.observerOptions);
   backend = options.backend ?? new GnomeInhibitorBackend({
     command: options.inhibitorCommand ?? process.env.CODEX_KEEP_AWAKE_GNOME_INHIBITOR ?? "gnome-session-inhibit",
     spawnProcess: options.spawnProcess,

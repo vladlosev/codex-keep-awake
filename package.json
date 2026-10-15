@@ -9,12 +9,12 @@
     "codex-keep-awake": "./scripts/codex-keep-awake.js"
   },
   "scripts": {
-    "test": "node --test test/backend.test.js test/cli.test.js test/lease.test.js test/observer.test.js test/opencode-activity.test.js test/opencode-backend.test.js test/opencode-loader.test.js test/opencode-plugin.test.js test/runtime.test.js test/state.test.js test/windows-backend.test.js",
+    "test": "node --test test/backend.test.js test/cli.test.js test/lease.test.js test/observer.test.js test/opencode-activity.test.js test/opencode-backend.test.js test/opencode-loader.test.js test/opencode-plugin.test.js test/runtime.test.js test/state.test.js test/unix-websocket.test.js test/windows-backend.test.js",
     "validate:package": "node --test test/package.test.js",
     "test:gnome": "node --test test/gnome-integration.test.js",
     "test:opencode-gnome": "node --test test/opencode-gnome-integration.test.js"
   },
-  "dependencies": {
+  "devDependencies": {
     "ws": "8.22.0"
   },
   "files": [
@@ -26,6 +26,6 @@
     "src/"
   ],
   "engines": {
-    "node": ">=18.0.0"
+    "node": "^24.17.0"
   }
 }

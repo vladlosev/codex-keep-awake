@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -123,8 +123,6 @@ test("GNOME lease follows real D-Bus waits, concurrent threads, completion, and 
 
   try {
     await mkdir(dataDir);
-    await writeFile(path.join(dataDir, "package.json"), '{"type":"module"}\n');
-    await symlink(path.join(root, "node_modules"), path.join(dataDir, "node_modules"), "dir");
     appServer = await createFakeAppServer(socketPath, statuses);
 
     statuses.set("thread-a", { type: "active", activeFlags: [] });

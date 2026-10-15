@@ -4,7 +4,7 @@
 
 Replace the Claude implementation with a Codex implementation in `~/dev/codex-keep-awake`. Retain reusable code and regression scenarios, remove Claude-specific behavior, and make packaging and documentation describe Codex.
 
-Use Node 18+, pinned `ws@8.22.0`, and Node built-ins. GNOME Linux is the first enabled backend. Preserve reusable macOS and Windows wake code as standalone helpers for future Codex support.
+Use Node `^24.17.0` and its built-in WebSocket client, with a Unix-socket HTTP transport adapter. Keep pinned `ws@8.22.0` only as a development dependency for test servers. GNOME Linux is the first enabled backend. Preserve reusable macOS and Windows wake code as standalone helpers for future Codex support.
 
 Protection must remain active during work, release during approval or input waits, and resume when execution continues. Registered threads and subagents share one supervisor and inhibitor.
 
@@ -33,9 +33,9 @@ Give retained native helpers a common lifecycle: acquire protection on startup, 
 
 **Deliverable:** A Node runtime with advisory Codex hooks.
 
-- Provide `setup`, `hook`, `status`, and `cleanup` commands.
-- Prepare locked npm dependencies beneath `PLUGIN_DATA`, with optional native addons and installation scripts disabled.
-- Run hooks offline. Missing dependencies produce an advisory message with the exact setup command.
+- Provide `hook`, `status`, and `cleanup` commands; retain `setup` as a compatibility command that only creates the state directory.
+- Store runtime state beneath `PLUGIN_DATA`; install no runtime npm packages.
+- Run hooks offline with no setup step. An unsupported Node runtime produces an actionable advisory.
 - Parse stdin as JSON and track Codex thread, turn, and subagent identities.
 - Handle `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `SubagentStart`, `SubagentStop`, `Stop`, `Interrupt`, and `SessionEnd`.
 - Use private state, atomic writes, exclusive filesystem locks, and process identity checks. Prevent duplicate supervisors and stale events clearing newer activity.
@@ -58,7 +58,7 @@ Codex hook events and trust requirements follow the [official hook documentation
 **Deliverable:** Protection that pauses and resumes with actual execution.
 
 - Discover the existing daemon socket using `codex app-server daemon version`; support an explicit socket override.
-- Connect through a Unix WebSocket using `ws`, initialize, and poll registered threads once per second.
+- Connect through Node's built-in WebSocket using a Unix-socket HTTP transport adapter, initialize, and poll registered threads once per second. Disable compression and retain the 1 MiB message-size limit.
 - Use read-only `thread/read` requests with `includeTurns: false`.
 - Require protection for active threads without waiting flags. Release that thread’s requirement during `waitingOnApproval` or `waitingOnUserInput`.
 - Remove completed, unloaded, or failed registrations. Continue protecting independently active threads and subagents.
@@ -84,7 +84,7 @@ The observer uses the states documented by the [Codex app-server](https://learn.
 - Port relevant path-quoting, PID-reuse, interruption, and concurrent-session scenarios into Node’s built-in test runner.
 - Remove tests specific to deleted Claude features.
 - Use fake Unix WebSocket servers and inhibitor executables to test waits, resumed execution, subagents, repeated events, and Stop-hook continuation.
-- Exercise stale locks, reused PIDs, duplicate startup, supervisor crashes, missing dependencies, malformed responses, and socket reconnection.
+- Exercise stale locks, reused PIDs, duplicate startup, supervisor crashes, dependency-free first use, malformed responses, socket reconnection, native handshake timeouts, and cancellation.
 - Release protection after 60 seconds of unresolved observation failure and expose degraded status.
 - For unobservable sessions such as `--no-daemon`, provide hook-based turn protection and explicitly report that automatic pause/resume during waits is unavailable.
 - Record identifiers and transitions without recording prompts, commands, transcripts, or credentials.
