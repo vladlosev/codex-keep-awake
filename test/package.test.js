@@ -71,6 +71,11 @@ test("the npm archive contains the Codex runtime and excludes repository-only fi
   const packResult = JSON.parse(result.stdout);
   const [{ files }] = Array.isArray(packResult) ? packResult : Object.values(packResult);
   const paths = new Set(files.map(({ path: filePath }) => filePath));
+  const serverEntry = readJson("package.json").exports?.["./server"];
+  assert.equal(typeof serverEntry, "string", "the package must expose an OpenCode server entrypoint");
+  assert.ok(serverEntry.startsWith("./"), "the server entrypoint must be package-relative");
+  assert.ok(!serverEntry.split("/").includes(".."), "the server entrypoint must stay inside the package");
+  assert.ok(paths.has(serverEntry.slice(2)), "the server entrypoint must be in the npm archive");
 
   for (const expected of [
     "README.md",
@@ -100,6 +105,8 @@ test("the npm archive contains the Codex runtime and excludes repository-only fi
 
   for (const filePath of paths) {
     assert.ok(!filePath.startsWith("test/"), `npm archive contains ${filePath}`);
+    assert.ok(!filePath.startsWith(".opencode/"), `npm archive contains ${filePath}`);
+    assert.ok(!filePath.startsWith("docs/superpowers/"), `npm archive contains ${filePath}`);
     assert.ok(!filePath.startsWith(".agents/"), `npm archive contains ${filePath}`);
     assert.ok(!filePath.startsWith(".claude-plugin/"), `npm archive contains ${filePath}`);
     assert.notEqual(filePath, "PLAN.md");

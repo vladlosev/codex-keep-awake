@@ -22,6 +22,9 @@ Node 24 release.
 
 The regular test suite uses controlled app-server and inhibitor processes,
 including native WebSocket handshake, message, timeout, and cleanup checks.
+Package validation also packs the real archive, installs it offline in a
+temporary consumer without development dependencies or lifecycle scripts, and
+checks the installed OpenCode entrypoint and both idle lifecycles.
 
 ## Install this checkout in Codex CLI
 
@@ -59,6 +62,13 @@ An explicit `--data-dir` argument or `PLUGIN_DATA` environment variable bypasses
 discovery and operates directly on that directory. Tests must isolate both
 `CODEX_HOME` and the default home-directory fallback when testing discovery.
 
+## Install the distributed plugin in OpenCode
+
+See [OpenCode installation](docs/opencode.md) for GitHub installation commands,
+version-specific configuration, prerequisites, and protection checks. OpenCode
+V1 uses `plugin` and `opencode plugin`; V2 uses `plugins` and
+`opencode plugin add`, which installs globally.
+
 ## Use from OpenCode CLI in this checkout
 
 This checkout includes a project-local plugin supporting OpenCode V1 and V2 in
@@ -73,6 +83,28 @@ versions share the activity tracker and native backends. Root `npm ci` is enough
 for the regular tests; installing dependencies inside `.opencode/` is not a test
 prerequisite. Earlier V1 object entrypoints exist from `1.18.29`, but releases
 below `1.18.35` have not been validated here.
+
+The canonical definition lives in `src/opencode-entry.js`. The root package
+exposes it as `codex-keep-awake/server` through `exports["./server"]`, and the
+project-local discovery module re-exports that same definition. The existing
+`src/` package contents include its runtime imports and native helpers;
+`.opencode/` stays outside the archive. No build or prepare script is needed.
+
+Use one installation route per project. Test a global package installation in
+a disposable project outside this checkout so local discovery cannot hide a
+missing package entrypoint or start another plugin instance.
+
+For actual package-host checks, use the pinned binaries by absolute path with
+separate temporary HOME, XDG config/data/state/cache, and npm/Git configuration.
+Install a full revision of a disposable Git repository containing the packed
+artifact, then run each host's private loopback server with a local synthetic
+provider. Confirm the cached package is loaded and its own helper acquires and
+releases inhibition. Preserve pre-existing inhibitors and stop all probe-owned
+processes before removing fixtures. The
+[GitHub installation plan](docs/superpowers/plans/2026-10-15-opencode-github-installation.md)
+records the procedure and results. Local archive/Git validation is separate
+from installation of an updated remote GitHub revision, which requires that
+revision to be available remotely.
 
 Busy and retrying sessions prevent GNOME suspend. A session waiting for
 permission or an answer releases its own protection, including protection held
