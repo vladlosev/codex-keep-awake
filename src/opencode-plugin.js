@@ -3,6 +3,7 @@ import { OpenCodeActivityTracker } from "./opencode-activity.js";
 export function createOpenCodeHooks({ backend, activity = new OpenCodeActivityTracker(), warn = console.warn }) {
   let lastRequired = false;
   let lastError = null;
+  let disposed = false;
 
   function reportBackendError() {
     const error = backend.status().error;
@@ -16,6 +17,7 @@ export function createOpenCodeHooks({ backend, activity = new OpenCodeActivityTr
 
   return {
     event({ event }) {
+      if (disposed) return;
       try {
         const required = activity.handle(event);
         const retrying = required && Boolean(backend.status().error);
@@ -29,6 +31,8 @@ export function createOpenCodeHooks({ backend, activity = new OpenCodeActivityTr
       }
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
       try {
         backend.close();
       } catch {

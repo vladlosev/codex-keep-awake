@@ -16,14 +16,12 @@ export class OpenCodeActivityTracker {
         if (typeof properties.sessionID === "string" && ACTIVE_STATUSES.has(properties.status?.type)) {
           this.#session(properties.sessionID).status = properties.status.type;
         } else if (typeof properties.sessionID === "string" && properties.status?.type === "idle") {
-          this.#session(properties.sessionID).status = "idle";
+          this.#finishSession(properties.sessionID);
         }
         break;
       case "session.idle":
-        if (typeof properties.sessionID === "string") this.#session(properties.sessionID).status = "idle";
-        break;
       case "session.error":
-        if (typeof properties.sessionID === "string") this.#session(properties.sessionID).status = "idle";
+        if (typeof properties.sessionID === "string") this.#finishSession(properties.sessionID);
         break;
       case "session.deleted":
         this.#deleteSession(properties.info?.id ?? properties.sessionID);
@@ -70,6 +68,12 @@ export class OpenCodeActivityTracker {
     if (!info || typeof info.id !== "string") return;
     const session = this.#session(info.id);
     session.parentID = typeof info.parentID === "string" ? info.parentID : null;
+  }
+
+  #finishSession(id) {
+    const session = this.#session(id);
+    session.status = "idle";
+    session.waits.clear();
   }
 
   #addWait(kind, properties) {

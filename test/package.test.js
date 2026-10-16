@@ -89,6 +89,8 @@ test("the npm archive contains the Codex runtime and excludes repository-only fi
     "src/opencode-activity.js",
     "src/opencode-backend.js",
     "src/opencode-plugin.js",
+    "src/opencode-v2-events.js",
+    "src/opencode-v2-plugin.js",
     "src/state.js",
     "src/supervisor.js",
     "src/unix-websocket.js",

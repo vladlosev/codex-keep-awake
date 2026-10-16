@@ -61,10 +61,18 @@ discovery and operates directly on that directory. Tests must isolate both
 
 ## Use from OpenCode CLI in this checkout
 
-This checkout includes a project-local OpenCode V1 plugin in
+This checkout includes a project-local plugin supporting OpenCode V1 and V2 in
 `.opencode/plugins/`. OpenCode loads it when started in this repository; no
 global plugin installation or configuration change is needed. From the
 repository root, run `opencode` for the TUI or use `opencode run` as usual.
+
+OpenCode `1.18.35` and `2.0.29` are the compatibility baselines. The same default
+export provides V1 `server()` hooks and V2 `setup(ctx)` with an event subscription
+and cleanup function. The entrypoint imports no OpenCode API package; both
+versions share the activity tracker and native backends. Root `npm ci` is enough
+for the regular tests; installing dependencies inside `.opencode/` is not a test
+prerequisite. Earlier V1 object entrypoints exist from `1.18.29`, but releases
+below `1.18.35` have not been validated here.
 
 Busy and retrying sessions prevent GNOME suspend. A session waiting for
 permission or an answer releases its own protection, including protection held
@@ -77,8 +85,30 @@ Node 24 series on `PATH` and `gnome-session-inhibit`. Other Linux desktop
 environments are not supported by the active backend. Run `npm test` for the
 event and lifecycle checks, or `npm run test:opencode-gnome` on a GNOME desktop
 to verify that real D-Bus inhibition follows busy, permission-wait, resumed,
-and idle events. The test uses a distinct OpenCode inhibitor reason and leaves
-any Codex inhibitor alone.
+question-wait, idle, and cleanup events through both adapters. These desktop
+checks inject controlled events; actual-host checks separately use the pinned
+OpenCode binaries in disposable projects with an isolated configuration and a
+local synthetic model provider. The test uses a distinct OpenCode inhibitor
+reason and leaves any Codex inhibitor alone.
+
+The V2 adapter translates execution, permission, and form events into the
+shared tracker's private event format. It scopes the server-wide stream to the
+plugin's loaded directory and workspace. Read-only session lookups recover
+ancestry for resumed sessions, with an independent one-second deadline because
+the V2 in-process context may ignore client cancellation options. Events and
+session metadata are reduced to identifiers, location, and activity state;
+model content, answers, and raw errors are not logged.
+
+If the V2 subscription fails or ends unexpectedly, the plugin releases its
+lease and prints an advisory to reload the plugin. It does not reconnect with
+stale activity state. Observation begins at setup: execution already running
+during a reload can reacquire protection at its next observed model step, but
+immediate reconstruction of active work is not implemented. A silently stalled
+stream cannot be detected by this event-only adapter. Cleanup aborts observation
+and releases protection immediately, including during a pending session lookup.
+OpenCode V2 can retain an old location generation while a request is in flight
+across a configuration reload. Its protection remains active until execution
+finishes or is interrupted and the old generation can unload.
 
 On Windows, the same project-local plugin holds a PowerShell lease that calls
 `SetThreadExecutionState` with `ES_CONTINUOUS | ES_SYSTEM_REQUIRED` during

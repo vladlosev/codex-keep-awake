@@ -59,3 +59,20 @@ test("deleting a child clears its pending requests without losing active parent 
     sessionID: "child", info: { id: "child" },
   })), true);
 });
+
+for (const terminal of [status("child", "idle"), event("session.idle", { sessionID: "child" }),
+  event("session.error", { sessionID: "child" })]) {
+  test(`${terminal.type} clears waits before the next execution and releases waiting ancestors`, () => {
+    const activity = new OpenCodeActivityTracker();
+    activity.handle(created("root"));
+    activity.handle(created("child", "root"));
+    activity.handle(status("root", "busy"));
+    activity.handle(status("child", "busy"));
+    activity.handle(event("permission.asked", { id: "per_1", sessionID: "child" }));
+    activity.handle(event("question.asked", { id: "que_1", sessionID: "child" }));
+    assert.equal(activity.isRequired(), false);
+    assert.equal(activity.handle(terminal), true);
+    activity.handle(status("root", "idle"));
+    assert.equal(activity.handle(status("child", "busy")), true);
+  });
+}

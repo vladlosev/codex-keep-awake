@@ -29,3 +29,20 @@ test("OpenCode event hooks change the backend lease only when activity changes",
   assert.deepEqual(backend.calls, [true, false, true, false]);
   assert.equal(backend.closed, true);
 });
+
+test("disposed hooks cannot reopen the lease and close it only once", () => {
+  const backend = {
+    calls: [], closes: 0,
+    setRequired(value) { this.calls.push(value); },
+    status() { return { error: null }; },
+    close() { this.closes += 1; },
+  };
+  const hooks = createOpenCodeHooks({ backend });
+  hooks.dispose();
+  hooks.dispose();
+  hooks.event({ event: { type: "session.status", properties: {
+    sessionID: "root", status: { type: "busy" },
+  } } });
+  assert.equal(backend.closes, 1);
+  assert.deepEqual(backend.calls, []);
+});
