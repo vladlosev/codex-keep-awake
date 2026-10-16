@@ -64,17 +64,16 @@ discovery and operates directly on that directory. Tests must isolate both
 
 ## Install the distributed plugin in OpenCode
 
-See [OpenCode installation](docs/opencode.md) for GitHub installation commands,
-version-specific configuration, prerequisites, and protection checks. OpenCode
-V1 uses `plugin` and `opencode plugin`; V2 uses `plugins` and
-`opencode plugin add`, which installs globally.
+See [OpenCode installation and removal](docs/opencode.md) for GitHub installation
+and uninstall instructions, version-specific configuration, prerequisites, and
+protection checks. OpenCode V1 uses `plugin` and `opencode plugin`; V2 uses
+`plugins` and `opencode plugin add`, which installs globally.
 
-## Use from OpenCode CLI in this checkout
+## OpenCode development and compatibility
 
-This checkout includes a project-local plugin supporting OpenCode V1 and V2 in
-`.opencode/plugins/`. OpenCode loads it when started in this repository; no
-global plugin installation or configuration change is needed. From the
-repository root, run `opencode` for the TUI or use `opencode run` as usual.
+This checkout does not automatically register the plugin in OpenCode. Use the
+[GitHub installation instructions](docs/opencode.md) to enable it globally or
+for a project. Tests import the package's canonical entrypoint directly.
 
 OpenCode `1.18.35` and `2.0.29` are the compatibility baselines. The same default
 export provides V1 `server()` hooks and V2 `setup(ctx)` with an event subscription
@@ -85,9 +84,8 @@ prerequisite. Earlier V1 object entrypoints exist from `1.18.29`, but releases
 below `1.18.35` have not been validated here.
 
 The canonical definition lives in `src/opencode-entry.js`. The root package
-exposes it as `codex-keep-awake/server` through `exports["./server"]`, and the
-project-local discovery module re-exports that same definition. The existing
-`src/` package contents include its runtime imports and native helpers;
+exposes it as `codex-keep-awake/server` through `exports["./server"]`. The
+existing `src/` package contents include its runtime imports and native helpers;
 `.opencode/` stays outside the archive. No build or prepare script is needed.
 
 OpenCode V1 also discovers `setup()` through its internal V2 command/catalog
@@ -98,9 +96,9 @@ routes as well as a model session during actual-host checks. Session-only
 checks do not cover this TUI initialization path. The catalog context and
 absence of a failure advisory are covered by the loader regression test.
 
-Use one installation route per project. Test a global package installation in
-a disposable project outside this checkout so local discovery cannot hide a
-missing package entrypoint or start another plugin instance.
+Use one installation route per project. Test package installation in a
+disposable project with isolated configuration so an existing installation
+cannot hide a missing package entrypoint or start another plugin instance.
 
 For actual package-host checks, use the pinned binaries by absolute path with
 separate temporary HOME, XDG config/data/state/cache, and npm/Git configuration.
@@ -150,7 +148,7 @@ OpenCode V2 can retain an old location generation while a request is in flight
 across a configuration reload. Its protection remains active until execution
 finishes or is interrupted and the old generation can unload.
 
-On Windows, the same project-local plugin holds a PowerShell lease that calls
+On Windows, the same OpenCode plugin holds a PowerShell lease that calls
 `SetThreadExecutionState` with `ES_CONTINUOUS | ES_SYSTEM_REQUIRED` during
 active work, then clears it when work pauses or finishes. It does not request
 that the display stay on. During a live OpenCode session, `powercfg /requests`
