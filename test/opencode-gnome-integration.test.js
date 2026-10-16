@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
-import OpenCodeKeepAwake from "../.opencode/plugins/codex-keep-awake.js";
+import OpenCodeKeepAwake from "../src/opencode-entry.js";
 import { controlledEvents, v2Event } from "./helpers/opencode.js";
 
 const reason = "OpenCode is running active work";
