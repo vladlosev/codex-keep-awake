@@ -4,6 +4,7 @@ import { mkdtempSync, cpSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { setImmediate as tick } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { controlledEvents } from "./helpers/opencode.js";
 import OpenCodeKeepAwake from "../.opencode/plugins/codex-keep-awake.js";
@@ -16,6 +17,28 @@ test("project-local OpenCode module exposes the V1 server lifecycle", async () =
   assert.equal(typeof hooks.event, "function");
   assert.equal(typeof hooks.dispose, "function");
   hooks.dispose();
+});
+
+test("V1 catalog setup does not start V2 observation or print a failure advisory", async (t) => {
+  const warnings = [];
+  t.mock.method(console, "warn", (message) => warnings.push(message));
+  const register = async () => ({ dispose: async () => {} });
+  const reload = async () => {};
+  // OpenCode 1.19.0's @opencode-ai/plugin/v2/promise context has no activity APIs.
+  const cleanup = OpenCodeKeepAwake.setup({
+    options: {},
+    agent: { transform: register, reload },
+    aisdk: { sdk: register, language: register },
+    catalog: { transform: register, reload },
+    command: { transform: register, reload },
+    integration: { transform: register, reload, connection: { active: async () => {}, resolve: async () => {} } },
+    plugin: { add: async () => {}, remove: async () => {} },
+    reference: { transform: register, reload },
+    skill: { transform: register, reload },
+  });
+  if (typeof cleanup === "function") t.after(cleanup);
+  await tick();
+  assert.deepEqual(warnings, []);
 });
 
 test("the same project-local module exposes V2 setup and cancels its subscription", {

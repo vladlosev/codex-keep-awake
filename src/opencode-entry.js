@@ -10,6 +10,8 @@ export default {
     return createOpenCodeHooks({ backend });
   },
   setup(ctx) {
+    // V1's internal catalog host also calls setup(), without activity APIs.
+    if (typeof ctx?.event?.subscribe !== "function") return () => {};
     const backend = createOpenCodeBackend();
     if (!backend) return () => {};
     return setupOpenCodeV2(ctx, { backend });

@@ -90,6 +90,14 @@ project-local discovery module re-exports that same definition. The existing
 `src/` package contents include its runtime imports and native helpers;
 `.opencode/` stays outside the archive. No build or prepare script is needed.
 
+OpenCode V1 also discovers `setup()` through its internal V2 command/catalog
+host, whose context lacks the V2 activity-event API. The entrypoint skips
+observation when `ctx.event.subscribe` is unavailable; V1 activity protection
+continues through `server()`. Exercise V1's `/api/command` and `/api/reference`
+routes as well as a model session during actual-host checks. Session-only
+checks do not cover this TUI initialization path. The catalog context and
+absence of a failure advisory are covered by the loader regression test.
+
 Use one installation route per project. Test a global package installation in
 a disposable project outside this checkout so local discovery cannot hide a
 missing package entrypoint or start another plugin instance.

@@ -277,7 +277,7 @@ npm run validate:package
 - [x] Inspect `jj status` and a diff scoped to the file map. Confirm the unrelated V2 work and existing user changes remain intact; no generated archive, private configuration, fixture Git metadata, logs, or dependencies have entered the working copy.
 - [x] Record actual commands, Node/OpenCode versions, test totals, packed import/lifecycle result, each real Git install/host result, and any unavailable desktop/platform check. Do not mark this plan's implementation tasks complete while they are only planned.
 - [x] Report the implementation as ready for review when local checks pass. Leave the final remote-GitHub check pending until the updated revision is available remotely through separately authorized publication.
-- [ ] After that revision is available, repeat each GitHub install in entirely fresh HOME/XDG/cache trees using the exact full commit hash and the commands below, then repeat the package-backed host activation check. Reuse the isolation/cleanup procedure from Task 3; empty caches prevent an older successful local install from masking a remote failure.
+- [x] After that revision is available, repeat each GitHub install in entirely fresh HOME/XDG/cache trees using the exact full commit hash and the commands below, then repeat the package-backed host activation check. Reuse the isolation/cleanup procedure from Task 3; empty caches prevent an older successful local install from masking a remote failure.
 
 ```sh
 "$CODEX_KEEP_AWAKE_OPENCODE_V1_BIN" plugin -g \
@@ -295,7 +295,7 @@ Set `published_revision` from the actual remotely available implementation commi
 - [x] V1 and V2 real Git installation, configuration, and host loading pass with no local discovery fallback.
 - [x] Required checks pass, Codex distribution is preserved, and desktop/platform limits are reported accurately.
 - [x] OpenCode user/developer documentation matches the tested baselines and commands.
-- [ ] The updated full GitHub revision installs and activates on both baselines after authorized publication; until then this item remains pending.
+- [x] The original installation implementation at full GitHub revision `579ecf14b5d5673e60498e9497665d83f4095d6e` installs and activates on both baselines after the user published it. The later catalog-context correction remains local.
 
 ## Execution evidence
 
@@ -316,7 +316,7 @@ Implemented and verified on 2026-10-15 (America/Los_Angeles) in the original Juj
 | OpenCode `1.18.35`, real package host | Installed helper acquired GNOME inhibition during a synthetic request, then released it on completion; host shutdown left no fixture-owned lease. |
 | OpenCode `2.0.29`, real package host | Inventory reported ID `codex-keep-awake`, state `active`, source type `package`. The installed helper acquired/released real inhibition during a synthetic request and host shutdown released all fixture-owned processes. |
 | Existing Codex inhibitor | Preserved throughout package-host and injected-event GNOME checks. |
-| Updated remote GitHub revision | Pending: the implementation has not been published. Both earlier GitHub downloads succeeded but correctly rejected the older package without an entrypoint. |
+| Updated remote GitHub revision | Passed after the user published revision `579ecf14b5d5673e60498e9497665d83f4095d6e`; see the post-publication evidence below. |
 
 The passing host probes packed the current runtime, extracted it into a disposable plain Git repository, committed fixture revision `bce6470e89079fc53b4bf460d700e0952a676445`, and ran the exact commands below through independent temporary environments:
 
@@ -334,4 +334,75 @@ Two verification details were resolved without changing runtime behavior:
 
 Inline review confirmed the runtime change is limited to moving the existing entrypoint and replacing its former location with a re-export. The package export points into the existing `src/` archive contents. README, Codex manifests, dependency lockfile, activity logic, native backends, and the earlier dual-version plan were not changed. No runtime dependency, prepare/build script, version bump, or new OpenCode API package was added.
 
-Remaining limits: live Windows power-request/parser checks need a Windows host and remain unverified; macOS stays inactive. The pre-existing `.opencode/package.json` module-type warning remains, and the minimum Node's npm warns about the user's newer `allow-scripts` setting before the isolated test starts. These do not affect the passing checks. Final installation/activation of an updated full GitHub revision remains a separate post-publication check; publication was not requested.
+Remaining limits: live Windows power-request/parser checks need a Windows host and remain unverified; macOS stays inactive. The pre-existing `.opencode/package.json` module-type warning remains, and the minimum Node's npm warns about the user's newer `allow-scripts` setting before the isolated test starts. These do not affect the passing checks. Final remote installation was pending at this implementation checkpoint and was completed after the user published the revision, as recorded below. No publication was performed by the agent.
+
+## Follow-up: OpenCode V1 command-menu advisory
+
+On 2026-10-15, the user reported the V2 observation-failure advisory while
+opening the command menu in OpenCode V1. The installed CLI was `1.19.0`.
+The earlier session-only host checks had missed V1's internal V2 catalog
+initialization path.
+
+V1's [external-plugin loader](https://github.com/anomalyco/opencode/blob/v1.19.0/packages/core/src/config/plugin/external.ts)
+also discovers the local module's `setup()` method. Its
+[Promise context](https://github.com/anomalyco/opencode/blob/v1.19.0/packages/plugin/src/v2/promise/context.ts)
+provides command/catalog transforms, but no activity-event subscription,
+session lookup, or location API. Invoking the full V2 observer with that
+context caused a local error and the advisory; the V1 `server()` activity
+hooks use a separate path.
+
+A disposable OpenCode `1.19.0` server reproduced the exact advisory after
+loading `/api/command`, `/api/reference`, and `/command`. All three routes
+returned HTTP 200. A temporary wrapper recorded only capability types:
+`event.subscribe`, `session.get`, and `location` were absent;
+`catalog.transform` and `command.transform` were functions. The unfixed
+entrypoint printed the advisory once; the fixed entrypoint printed it zero
+times under the same probe. No user configuration, prompts, answers, or raw
+responses were retained.
+
+The shared entrypoint now starts V2 observation only when
+`ctx.event.subscribe` is callable. A public-entrypoint regression using the
+actual V1 catalog-context shape failed with the advisory before the fix and
+passed afterward. True V2 stream failure/EOF advisories remain covered and
+unchanged.
+
+Verification of this local fix:
+
+| Check | Result |
+| --- | --- |
+| Full `npm test`, Node `24.17.0` | 83 passed, 1 Windows-only parser test skipped, 0 failures. |
+| Full `npm test`, Node `24.22.0` | 83 passed, 1 Windows-only parser test skipped, 0 failures. |
+| Package validation on both Node versions | 4 passed per version, including installed V1/V2 lifecycles. |
+| Real OpenCode `1.19.0` package host | Full local Git fixture installation, busy/completion/shutdown inhibition, and absence of the advisory passed. |
+| Real OpenCode `2.0.29` package host | The same checks passed; package inventory remained active. |
+
+Both package hosts used fixture revision
+`28c7b73832e7aba4274d87966fc82aadc8c0104f`, generated from the fixed packed
+artifact. All private fixture state was removed after the hosts and helpers
+stopped. The correction remains in the working copy until separately
+published; the user's earlier push does not include it.
+
+## Post-publication GitHub verification
+
+After the user pushed the implementation, the GitHub API confirmed published
+main revision `579ecf14b5d5673e60498e9497665d83f4095d6e`. Both pinned CLIs
+installed that exact GitHub revision in new independent HOME/XDG/config/cache
+trees using:
+
+```sh
+/tmp/keep-awake-opencode-v1/opencode plugin -g \
+  github:vladlosev/codex-keep-awake#579ecf14b5d5673e60498e9497665d83f4095d6e
+/tmp/keep-awake-opencode-v2/node_modules/@opencode/cli-linux-x64/bin/opencode plugin add \
+  github:vladlosev/codex-keep-awake#579ecf14b5d5673e60498e9497665d83f4095d6e
+```
+
+OpenCode `1.18.35` and `2.0.29` both installed and loaded the actual GitHub
+package, then acquired and released GNOME inhibition through their own cached
+helper during a synthetic session and host shutdown. The V2 inventory reported
+an active package source with the exact GitHub specifier. These probes used no
+local discovery fallback or prepopulated package cache. All private host state
+was removed after cleanup; the pre-existing Codex inhibitor was preserved.
+
+This completes the original remote installation check. It verifies the
+published installation implementation, not publication of the subsequent V1
+catalog-context correction in this working copy.
