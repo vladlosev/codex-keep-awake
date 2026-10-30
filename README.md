@@ -1,22 +1,24 @@
 # codex-keep-awake
 
-A Codex CLI plugin that keeps your computer awake during active work on
-GNOME Linux. Normal sleep behavior resumes while Codex waits for your
-approval or input.
+A plugin that keeps your computer awake during active Codex CLI and OpenCode
+work. Normal sleep behavior resumes while work waits for your approval or
+input. Codex supports GNOME Linux; OpenCode supports GNOME Linux and Windows.
 
 This project is a fork of
 [claude-keep-awake](https://github.com/AxGord/claude-keep-awake) by
-[AxGord](https://github.com/AxGord), adapted for Codex.
+[AxGord](https://github.com/AxGord), adapted for Codex and OpenCode.
 
 ## Features
 
-- Prevents automatic suspend while Codex is working
+- Prevents automatic suspend while Codex or OpenCode is working
 - Pauses protection during approval and input waits, then resumes with work
-- Keeps protection active while any tracked thread or subagent is still working
+- Keeps protection active while any tracked thread, subagent, or session is working
 - Allows the display to blank and lock normally
-- Starts automatically through trusted hooks, with no runtime npm dependencies
+- Starts automatically, with no runtime npm dependencies
 
-## Quick Start
+## Codex CLI
+
+### Quick Start
 
 Add the GitHub repository as a marketplace, then install the plugin:
 
@@ -29,7 +31,7 @@ Use `--ref` on `marketplace add` to select a branch or tag.
 The [Codex plugin documentation](https://learn.chatgpt.com/docs/plugins)
 describes the CLI plugin browser and starting a new session after installation.
 
-## Usage
+### Usage
 
 Start a new Codex CLI session, enter `/hooks`, then review and trust the
 plugin's hook commands. Codex skips untrusted hooks. The
@@ -39,7 +41,9 @@ review and trust in the CLI.
 The first trusted hook starts the runtime automatically. No `npm install` or
 `setup` command is required.
 
-## Status and Cleanup
+### Status and Cleanup
+
+These terminal commands manage the Codex plugin only.
 
 The plugin creates its private state directory automatically. With the default
 plugin and marketplace names, it is normally
@@ -68,7 +72,7 @@ current state or the result of cleanup.
 asks its background process to stop and release suspend protection. It leaves
 the private data directory in place. A later hook can start protection again.
 
-## Uninstall
+### Uninstall
 
 Run `cleanup` as described above with the same data directory, then remove the
 plugin from Codex CLI:
@@ -87,7 +91,7 @@ If you installed the optional terminal commands, remove them with:
 npm uninstall --global codex-keep-awake
 ```
 
-## How It Works
+### How It Works
 
 With the normal app-server daemon, protection pauses automatically during
 approval and input waits and resumes when work resumes. `status` reports
@@ -101,14 +105,84 @@ provide turn-based protection, but automatic pause/resume during approval or
 input waits is unavailable. `status` reports this limitation. Background jobs
 that continue after a turn ends are not tracked.
 
+## OpenCode
+
+### Quick Start
+
+Install globally using the command for your OpenCode version.
+
+OpenCode 1:
+
+```sh
+opencode plugin -g github:vladlosev/codex-keep-awake
+```
+
+OpenCode 2:
+
+```sh
+opencode plugin add github:vladlosev/codex-keep-awake
+```
+
+Start a fresh OpenCode session after installation. The plugin starts
+automatically; no separate `npm install` or `setup` command is required.
+Choose one installation route per project. See
+[OpenCode installation and removal](docs/opencode.md) for project-only
+configuration, pinned revisions, and detailed removal instructions.
+
+### Usage and Protection Checks
+
+Busy and retrying sessions prevent suspend. Protection pauses while a session
+waits for permission or an answer and ends when work finishes. Another active
+session keeps protection in place.
+
+On GNOME, check while OpenCode is working, then again during a wait or after
+completion:
+
+```sh
+gnome-session-inhibit --list
+```
+
+The inhibitor with reason `OpenCode is running active work` appears during
+active work and disappears when no tracked session needs protection. A separate
+Codex inhibitor can remain active.
+
+On Windows, check system power requests with:
+
+```powershell
+powercfg /requests
+```
+
+The OpenCode power request follows the same activity and wait states. The
+display can still blank and lock normally on both platforms.
+
+### Uninstall
+
+For OpenCode 2 global installations:
+
+```sh
+opencode plugin remove github:vladlosev/codex-keep-awake
+```
+
+Use the exact installed package specifier, including any `#revision` suffix.
+For OpenCode 1, remove that entry from the `plugin` array in your global
+OpenCode configuration. Project installations require removing the entry from
+the project's `plugin` (V1) or `plugins` (V2) array instead.
+
+Close and reopen affected OpenCode instances after removal, then use the
+protection checks above to confirm the OpenCode power request has disappeared.
+
 ## Requirements
 
 - Codex CLI: the supported baseline is version 0.160.0 with its normal local
   app-server daemon
-- Node.js: 24.17.0 or newer within the Node 24 series, with `node` on `PATH`
-- Linux: a GNOME session with `gnome-session-inhibit`
+- OpenCode: compatibility baselines are versions 1.18.35 and 2.0.29
+- Node.js for Codex and OpenCode on GNOME: 24.17.0 or newer within the Node 24
+  series, with `node` on `PATH`
+- GNOME Linux for Codex and OpenCode: a GNOME session with `gnome-session-inhibit`
+- Windows for OpenCode: the built-in `powershell.exe`; live inhibition has not
+  been verified on a Windows host
 
-Other desktop environments are not supported.
+Other Linux desktop environments and macOS are not supported.
 
 ## License
 
