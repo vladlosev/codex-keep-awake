@@ -1,5 +1,14 @@
-node_modules/
+node_modules/*
+!node_modules/dbus-native/
+!node_modules/dbus-native/**
+!node_modules/xml2js/
+!node_modules/xml2js/**
+!node_modules/sax/
+!node_modules/sax/**
+!node_modules/xmlbuilder/
+!node_modules/xmlbuilder/**
 .DS_Store
 *.log
 bin/
 experiments/
+.*.sw?

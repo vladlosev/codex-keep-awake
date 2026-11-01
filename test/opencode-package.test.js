@@ -37,7 +37,14 @@ test("an installed archive exposes both OpenCode lifecycles without development 
     "install", "--ignore-scripts", "--omit=dev", "--omit=optional", "--no-audit", "--no-fund",
     "--package-lock=false", "--offline", path.join(directory, filename),
   ], consumer);
+  const installedPackage = path.join(consumer, "node_modules", "codex-keep-awake");
   assert.equal(existsSync(path.join(consumer, "node_modules", "ws")), false);
+  assert.equal(existsSync(path.join(installedPackage, "node_modules", "dbus-native")), true);
+  assert.equal(existsSync(path.join(installedPackage, "node_modules", "xml2js")), true);
+  assert.equal(existsSync(path.join(installedPackage, "node_modules", "sax")), true);
+  assert.equal(existsSync(path.join(installedPackage, "node_modules", "xmlbuilder")), true);
+  assert.equal(existsSync(path.join(consumer, "node_modules", "@vercel", "ncc")), false);
+  assert.equal(existsSync(path.join(installedPackage, "src", "portal-dbus.cjs")), false);
   writeFileSync(path.join(consumer, "verify.mjs"), `
     import assert from "node:assert/strict";
     import { fileURLToPath } from "node:url";

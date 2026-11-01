@@ -1,9 +1,9 @@
 # OpenCode installation and removal
 
-Keep Awake prevents automatic suspend during active OpenCode work. Protection
-pauses while a session waits for permission or an answer and ends when work
-finishes. Another active session keeps protection in place. The display can
-still blank and lock normally.
+Keep Awake requests suspend inhibition during active OpenCode work through the
+XDG Desktop Portal. Protection pauses while a session waits for permission or
+an answer and ends when work finishes. Another active session keeps protection
+in place. The display can still blank and lock normally.
 
 The installation commands below target OpenCode `1.18.35` and `2.0.29`. Use a
 GitHub revision that includes the OpenCode package entrypoint; older revisions
@@ -11,12 +11,16 @@ without it fail with a missing plugin entrypoint error.
 
 ## Requirements
 
-- GNOME Linux: Node.js `24.17.0` or newer within the Node 24 series
-  (`^24.17.0`) on `PATH`, plus `gnome-session-inhibit`.
+- Linux: Node.js `24.17.0` or newer within the Node 24 series (`^24.17.0`) on
+  `PATH`, a logged-in session bus, and an XDG Desktop Portal backend that
+  supports suspend inhibition.
 - Windows: the built-in `powershell.exe`.
 
-Other Linux desktop environments and macOS are unsupported. Live Windows
-inhibition has not been verified on a Windows host.
+The portal chooses the backend configured for the session. Source analysis
+identifies suspend-capable backends for GNOME, KDE Plasma, Cinnamon, and MATE;
+live desktop verification has been performed on GNOME only. The examined Xfce
+portal backend does not support suspend inhibition. macOS is unsupported. Live
+Windows inhibition has not been verified on a Windows host.
 
 OpenCode installs the package directly from GitHub. No npm publication,
 separate `npm install`, OpenCode API package, or build command is required.
@@ -93,9 +97,12 @@ On GNOME:
 gnome-session-inhibit --list
 ```
 
-Active work adds an inhibitor with the reason `OpenCode is running active
-work`. It disappears when no tracked session requires protection. Any separate
-Codex inhibitor can remain active.
+Active work should add a native inhibitor with the reason `OpenCode is running
+active work`. It disappears when no tracked session requires protection. Any
+separate Codex inhibitor can remain active. This GNOME command verifies the
+native request; a successful portal response alone does not verify that a
+desktop backend applied it. Other desktops may provide a different inhibitor
+viewer.
 
 On Windows:
 

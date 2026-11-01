@@ -2,7 +2,9 @@
 
 A plugin that keeps your computer awake during active Codex CLI and OpenCode
 work. Normal sleep behavior resumes while work waits for your approval or
-input. Codex supports GNOME Linux; OpenCode supports GNOME Linux and Windows.
+input. Codex and OpenCode use the XDG Desktop Portal suspend-inhibit API on
+Linux; OpenCode also supports Windows. The portal chooses the installed
+desktop backend.
 
 This project is a fork of
 [claude-keep-awake](https://github.com/AxGord/claude-keep-awake) by
@@ -10,11 +12,11 @@ This project is a fork of
 
 ## Features
 
-- Prevents automatic suspend while Codex or OpenCode is working
+- Requests suspend inhibition while Codex or OpenCode is working
 - Pauses protection during approval and input waits, then resumes with work
 - Keeps protection active while any tracked thread, subagent, or session is working
 - Allows the display to blank and lock normally
-- Starts automatically, with no runtime npm dependencies
+- Starts automatically; its D-Bus client packages ship with the plugin
 
 ## Codex CLI
 
@@ -96,7 +98,9 @@ npm uninstall --global codex-keep-awake
 With the normal app-server daemon, protection pauses automatically during
 approval and input waits and resumes when work resumes. `status` reports
 whether the plugin connected to Codex, whether automatic pause/resume is
-available, and whether GNOME inhibition is active. An observation failure
+available, whether the portal accepted the suspend request, and the selected
+backend (`xdg-desktop-portal`). Portal acceptance does not verify that the
+desktop's native power manager applied the inhibitor. An observation failure
 after a successful connection releases protection after 60 seconds and
 reports degraded status.
 
@@ -131,20 +135,21 @@ configuration, pinned revisions, and detailed removal instructions.
 
 ### Usage and Protection Checks
 
-Busy and retrying sessions prevent suspend. Protection pauses while a session
-waits for permission or an answer and ends when work finishes. Another active
-session keeps protection in place.
+Busy and retrying sessions request suspend inhibition. Protection pauses while
+a session waits for permission or an answer and ends when work finishes.
+Another active session keeps protection in place.
 
-On GNOME, check while OpenCode is working, then again during a wait or after
-completion:
+On GNOME, check the native inhibitor while OpenCode is working, then again
+during a wait or after completion:
 
 ```sh
 gnome-session-inhibit --list
 ```
 
-The inhibitor with reason `OpenCode is running active work` appears during
-active work and disappears when no tracked session needs protection. A separate
-Codex inhibitor can remain active.
+The inhibitor with reason `OpenCode is running active work` should appear
+during active work and disappear when no tracked session needs protection. A
+separate Codex inhibitor can remain active. Other desktops select their own
+portal backend and may have a different native inhibitor viewer.
 
 On Windows, check system power requests with:
 
@@ -176,13 +181,18 @@ protection checks above to confirm the OpenCode power request has disappeared.
 - Codex CLI: the supported baseline is version 0.160.0 with its normal local
   app-server daemon
 - OpenCode: compatibility baselines are versions 1.18.35 and 2.0.29
-- Node.js for Codex and OpenCode on GNOME: 24.17.0 or newer within the Node 24
+- Node.js for Codex and OpenCode on Linux: 24.17.0 or newer within the Node 24
   series, with `node` on `PATH`
-- GNOME Linux for Codex and OpenCode: a GNOME session with `gnome-session-inhibit`
+- Linux: a logged-in desktop session with a session D-Bus and an XDG Desktop
+  Portal backend that supports suspend inhibition
 - Windows for OpenCode: the built-in `powershell.exe`; live inhibition has not
   been verified on a Windows host
 
-Other Linux desktop environments and macOS are not supported.
+The portal selects the backend configured for the session. Source analysis
+identifies suspend-capable backends for GNOME, KDE Plasma, Cinnamon, and MATE;
+live desktop verification has been performed on GNOME only. The examined Xfce
+portal backend does not support suspend inhibition. Manual suspend remains
+subject to desktop policy. macOS is not supported.
 
 ## License
 

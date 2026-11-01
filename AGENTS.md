@@ -16,15 +16,21 @@ npm run validate:package
 ```
 
 The pinned `ws@8.22.0` package is a development dependency used only by test
-servers. The runtime uses Node's built-in WebSocket client and has no npm
-dependencies to install. CI tests the minimum Node version and the latest
-Node 24 release.
+servers. `dbus-native@0.16.2` is the Linux portal client's runtime dependency.
+Its original package and the `xml2js`, `sax`, and `xmlbuilder` packages it uses
+are vendored under `node_modules/` and included in the npm archive through
+`bundleDependencies`. Keep those package sources and license notices intact.
+Runtime users install no separate npm dependencies. CI tests the minimum Node
+version and the latest Node 24 release.
 
 The regular test suite uses controlled app-server and inhibitor processes,
-including native WebSocket handshake, message, timeout, and cleanup checks.
-Package validation also packs the real archive, installs it offline in a
-temporary consumer without development dependencies or lifecycle scripts, and
-checks the installed OpenCode entrypoint and both idle lifecycles.
+including native WebSocket handshake, message, timeout, retry, and cleanup
+checks. Portal protocol tests use a fake D-Bus client and never connect to the
+desktop session bus. Package validation packs the real archive, installs it
+offline in a temporary consumer without development dependencies or lifecycle
+scripts, checks the OpenCode entrypoint and idle lifecycles, then uses a private
+D-Bus daemon and fake portal to exercise the installed backend in its host
+process. The vendored packages have no build or generated-bundle step.
 
 ## Install this checkout in Codex CLI
 
@@ -112,22 +118,31 @@ records the procedure and results. Local archive/Git validation is separate
 from installation of an updated remote GitHub revision, which requires that
 revision to be available remotely.
 
-Busy and retrying sessions prevent GNOME suspend. A session waiting for
+Busy and retrying sessions request suspend inhibition through the XDG Desktop
+Portal. A session waiting for
 permission or an answer releases its own protection, including protection held
 for busy parent sessions; another active session keeps the inhibitor in place.
 Idle, failed, or deleted sessions release their protection. The display may
 still blank and lock normally.
 
-On GNOME, the OpenCode integration requires Node.js 24.17.0 or newer within the
-Node 24 series on `PATH` and `gnome-session-inhibit`. Other Linux desktop
-environments are not supported by the active backend. Run `npm test` for the
-event and lifecycle checks, or `npm run test:opencode-gnome` on a GNOME desktop
-to verify that real D-Bus inhibition follows busy, permission-wait, resumed,
-question-wait, idle, and cleanup events through both adapters. These desktop
-checks inject controlled events; actual-host checks separately use the pinned
-OpenCode binaries in disposable projects with an isolated configuration and a
-local synthetic model provider. The test uses a distinct OpenCode inhibitor
-reason and leaves any Codex inhibitor alone.
+On Linux, OpenCode requires Node.js 24.17.0 or newer within the Node 24 series
+on `PATH`, a session bus, and an XDG Desktop Portal backend that supports
+suspend inhibition. The portal chooses the configured desktop backend. Source
+analysis identifies support in GNOME, KDE Plasma, Cinnamon, and MATE backends;
+the live desktop integration has been verified on GNOME only. The examined
+Xfce backend does not support suspend inhibition. Portal `Response=0` means the
+portal accepted the request; it does not verify that the desktop power manager
+applied a native inhibitor. The helper reports active only after that response,
+retries unavailable requests every five seconds while work remains active, and
+releases on idle, helper shutdown, or session-bus loss.
+
+Run `npm test` for event and lifecycle checks. On GNOME,
+`npm run test:opencode-gnome` checks that real native inhibition follows busy,
+permission-wait, resumed, question-wait, idle, and cleanup events through both
+adapters. These desktop checks inject controlled events; actual-host checks
+separately use the pinned OpenCode binaries in disposable projects with an
+isolated configuration and a local synthetic model provider. The test uses a
+distinct OpenCode inhibitor reason and leaves any Codex inhibitor alone.
 
 The V2 adapter translates execution, permission, and form events into the
 shared tracker's private event format. It scopes the server-wide stream to the
@@ -157,16 +172,20 @@ idle state to confirm the lease was released. The Windows backend uses the
 built-in `powershell.exe` and adds no npm dependencies. The test suite parses
 the helper with PowerShell when run on Windows.
 
-## Codex GNOME integration checks
+## Codex Linux portal integration checks
 
-On a GNOME desktop, `npm run test:gnome` checks real D-Bus inhibition while its
-test app-server reports active work, approval waits, resumed work, concurrent
-threads, completion, and supervisor crashes.
+On a GNOME desktop, `npm run test:gnome` checks that the supervisor's native
+inhibitor follows active work, approval waits, resumed work, concurrent
+threads, completion, and supervisor crashes. The supervisor owns the portal
+connection directly, so a killed supervisor releases the request when its
+session-bus connection closes.
 
 To hold the real inhibitor beyond Automatic Suspend, set
 `CODEX_KEEP_AWAKE_GNOME_HOLD_MS` to a duration in milliseconds longer than the
 configured AC timeout. The integration test checks that duration against
-`gsettings` and verifies that GNOME continues to list the inhibitor throughout.
+`gsettings` and verifies that GNOME continues to list the native inhibitor
+throughout. This is a timed hold check; it does not issue suspend or change
+power settings.
 
 ## Runtime design and compatibility
 
@@ -191,11 +210,15 @@ emits JSON describing the supervisor, registered threads, observation status,
 and inhibitor state. The `cleanup` command clears registrations, signals the
 supervisor to exit, and releases the inhibitor; a later hook can start it again.
 
-Existing dependency files from an earlier version are no longer used. The old
-`setup` command remains compatible: it only creates the state directory and
-reports that there are no runtime dependencies to install.
+Existing dependency-install files from an earlier version are no longer used.
+The old `setup` command remains compatible: it only creates the state directory
+and reports that no separate runtime dependency installation is needed.
 
-The Codex plugin currently enables GNOME inhibition. The OpenCode plugin
-enables GNOME and Windows inhibition; the macOS helper remains inactive. The
-original MIT notice and brief upstream attribution remain in [LICENSE](LICENSE)
-and the retained helper source.
+The Codex and OpenCode Linux integrations use the same in-process XDG Desktop
+Portal client and request suspend inhibition only. `status` reports the backend as
+`xdg-desktop-portal`, whether the portal accepted the request, and
+`inhibitionVerified: false` because the public portal response does not confirm
+that the selected desktop backend applied native inhibition. OpenCode also
+supports its Windows execution-state backend; the macOS helper remains
+inactive. The vendored D-Bus packages retain their original license notices and
+upstream attribution in `node_modules/`.

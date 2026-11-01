@@ -23,7 +23,7 @@ function runCli(dataDir, input, { args = ["hook"], pluginRoot = repoRoot, nodeAr
         PLUGIN_DATA: dataDir,
         PATH: "",
         CODEX_KEEP_AWAKE_SOCKET: path.join(dataDir, "missing-app-server.sock"),
-        CODEX_KEEP_AWAKE_GNOME_INHIBITOR: path.join(dataDir, "missing-inhibitor"),
+        CODEX_KEEP_AWAKE_TEST_PORTAL_DBUS_MODULE: path.join(repoRoot, "test", "helpers", "fake-portal-dbus.cjs"),
       },
       stdio: [descriptor, "pipe", "pipe"],
     });

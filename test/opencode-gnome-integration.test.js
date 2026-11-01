@@ -8,7 +8,7 @@ const reason = "OpenCode is running active work";
 
 function inhibitorCount() {
   const listing = execFileSync("gnome-session-inhibit", ["--list"], { encoding: "utf8" });
-  return listing.split(/\r?\n/).filter((line) => line.includes(reason)).length;
+  return listing.split(/\r?\n/).filter((line) => line.includes(reason) && /\(suspend\)\s*$/.test(line)).length;
 }
 
 async function waitForCount(expected, description, timeoutMs = 6000) {

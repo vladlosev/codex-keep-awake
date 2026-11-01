@@ -4,14 +4,24 @@ export function createOpenCodeHooks({ backend, activity = new OpenCodeActivityTr
   let lastRequired = false;
   let lastError = null;
   let disposed = false;
+  let unsubscribeStatus = null;
 
   function reportBackendError() {
+    if (disposed) return;
     const error = backend.status().error;
     if (error && error !== lastError) {
       warn(`[Codex Keep Awake] OpenCode inhibition is unavailable: ${error}`);
       lastError = error;
     } else if (!error) {
       lastError = null;
+    }
+  }
+
+  if (typeof backend.subscribeStatus === "function") {
+    try {
+      unsubscribeStatus = backend.subscribeStatus(reportBackendError);
+    } catch {
+      warn("[Codex Keep Awake] Could not observe OpenCode inhibitor status changes.");
     }
   }
 
@@ -33,6 +43,8 @@ export function createOpenCodeHooks({ backend, activity = new OpenCodeActivityTr
     dispose() {
       if (disposed) return;
       disposed = true;
+      unsubscribeStatus?.();
+      unsubscribeStatus = null;
       try {
         backend.close();
       } catch {

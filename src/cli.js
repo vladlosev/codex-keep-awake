@@ -89,6 +89,8 @@ function status(dataDirectory) {
         observationMessage: "The background observer stopped; it will restart on the next Codex hook.",
         protectionRequired: false,
         inhibitionActive: false,
+        inhibitionBackend: "xdg-desktop-portal",
+        inhibitionVerified: false,
       }
       : state.runtime;
   writeJson({

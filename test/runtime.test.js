@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, openSync, writeFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,14 +68,10 @@ async function waitForSupervisorCount(dataDir, count) {
 
 test("concurrent hooks share one supervisor and ignore a stale Stop", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "codex-keep-awake-test-"));
-  const fakeBin = path.join(dataDir, "bin");
-  const environment = {};
+  const environment = {
+    CODEX_KEEP_AWAKE_TEST_PORTAL_DBUS_MODULE: path.join(repoRoot, "test", "helpers", "fake-portal-dbus.cjs"),
+  };
   try {
-    await mkdir(fakeBin);
-    const fakeInhibitor = path.join(fakeBin, "gnome-session-inhibit");
-    await writeFile(fakeInhibitor, "#!/bin/sh\ncat >/dev/null\n");
-    await chmod(fakeInhibitor, 0o755);
-    environment.CODEX_KEEP_AWAKE_GNOME_INHIBITOR = fakeInhibitor;
     const startupEvents = Array.from({ length: 6 }, (_, index) => ({
       hook_event_name: "UserPromptSubmit",
       session_id: `thread-${index}`,

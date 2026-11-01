@@ -46,3 +46,30 @@ test("disposed hooks cannot reopen the lease and close it only once", () => {
   assert.equal(backend.closes, 1);
   assert.deepEqual(backend.calls, []);
 });
+
+test("OpenCode reports asynchronous inhibitor failures and unsubscribes on disposal", () => {
+  const listeners = new Set();
+  const warnings = [];
+  let error = null;
+  const backend = {
+    setRequired() {},
+    status() { return { error }; },
+    subscribeStatus(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    close() {},
+  };
+  const hooks = createOpenCodeHooks({ backend, warn: (message) => warnings.push(message) });
+
+  error = "The XDG Desktop Portal suspend inhibitor is unavailable";
+  for (const listener of listeners) listener();
+  hooks.dispose();
+  error = "another failure";
+  for (const listener of listeners) listener();
+
+  assert.deepEqual(warnings, [
+    "[Codex Keep Awake] OpenCode inhibition is unavailable: The XDG Desktop Portal suspend inhibitor is unavailable",
+  ]);
+  assert.equal(listeners.size, 0);
+});

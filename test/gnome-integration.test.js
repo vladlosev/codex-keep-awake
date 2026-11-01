@@ -10,7 +10,7 @@ import test from "node:test";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const cliPath = path.join(root, "scripts", "codex-keep-awake.js");
-const reason = "Codex is running active work";
+const reason = "Codex portal integration probe";
 const holdMs = Number(process.env.CODEX_KEEP_AWAKE_GNOME_HOLD_MS ?? 0);
 
 function run(file, args, { input, env }) {
@@ -61,7 +61,7 @@ function inhibitorListing() {
 }
 
 function codexInhibitorCount(listing) {
-  return listing.split(/\r?\n/).filter((line) => line.includes(reason)).length;
+  return listing.split(/\r?\n/).filter((line) => line.includes(reason) && /\(suspend\)\s*$/.test(line)).length;
 }
 
 async function waitFor(read, predicate, description, timeoutMs = 6000) {
@@ -75,7 +75,7 @@ async function waitFor(read, predicate, description, timeoutMs = 6000) {
   assert.fail(`Timed out waiting for ${description}`);
 }
 
-test("GNOME lease follows real D-Bus waits, concurrent threads, completion, and supervisor crashes", {
+test("GNOME portal lease follows waits, concurrent threads, completion, and supervisor crashes", {
   skip: process.platform !== "linux",
 }, async () => {
   const initialListing = inhibitorListing();
@@ -87,12 +87,13 @@ test("GNOME lease follows real D-Bus waits, concurrent threads, completion, and 
   const statuses = new Map();
   let appServer;
   const baseEnv = { ...process.env };
-  delete baseEnv.CODEX_KEEP_AWAKE_GNOME_INHIBITOR;
+  delete baseEnv.CODEX_KEEP_AWAKE_TEST_PORTAL_DBUS_MODULE;
   const env = {
     ...baseEnv,
     PLUGIN_ROOT: root,
     PLUGIN_DATA: dataDir,
     CODEX_KEEP_AWAKE_SOCKET: socketPath,
+    CODEX_KEEP_AWAKE_TEST_PORTAL_REASON: reason,
   };
 
   const invokeHook = async (eventName, threadId) => {
@@ -112,6 +113,8 @@ test("GNOME lease follows real D-Bus waits, concurrent threads, completion, and 
     readStatusAndInhibitors,
     ({ state, listing }) => state.runtime?.appServerConnected
       && state.runtime?.inhibitionActive
+      && state.runtime?.inhibitionBackend === "xdg-desktop-portal"
+      && state.runtime?.inhibitionVerified === false
       && codexInhibitorCount(listing) === 1,
     description,
   );

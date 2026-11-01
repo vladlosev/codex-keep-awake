@@ -28,8 +28,14 @@ test("Codex package, plugin, marketplace, and locked dependency metadata agree",
     [pkg.name, { source: "local", path: "./" }],
   ]);
   assert.equal(lock.packages["node_modules/ws"].version, "8.22.0");
-  assert.deepEqual(pkg.dependencies ?? {}, {});
+  assert.deepEqual(pkg.dependencies, { "dbus-native": "0.16.2" });
+  assert.deepEqual(pkg.bundleDependencies, ["dbus-native"]);
   assert.equal(pkg.devDependencies.ws, "8.22.0");
+  assert.equal(pkg.devDependencies["@vercel/ncc"], undefined);
+  assert.equal(lock.packages["node_modules/dbus-native"].dev, undefined);
+  assert.equal(lock.packages["node_modules/xml2js"].dev, undefined);
+  assert.equal(lock.packages["node_modules/sax"].dev, undefined);
+  assert.equal(lock.packages["node_modules/xmlbuilder"].dev, undefined);
   assert.equal(lock.packages["node_modules/ws"].dev, true);
   assert.equal(pkg.engines.node, "^24.17.0");
   assert.equal(lock.packages[""].engines.node, pkg.engines.node);
@@ -96,12 +102,24 @@ test("the npm archive contains the Codex runtime and excludes repository-only fi
     "src/opencode-plugin.js",
     "src/opencode-v2-events.js",
     "src/opencode-v2-plugin.js",
+    "src/portal-inhibitor.js",
     "src/state.js",
     "src/supervisor.js",
     "src/unix-websocket.js",
     "src/windows-backend.js",
     "src/windows-keep-awake.ps1",
+    "node_modules/dbus-native/LICENSE",
+    "node_modules/dbus-native/index.js",
+    "node_modules/dbus-native/package.json",
+    "node_modules/xml2js/LICENSE",
+    "node_modules/xml2js/lib/xml2js.js",
+    "node_modules/sax/LICENSE.md",
+    "node_modules/sax/lib/sax.js",
+    "node_modules/xmlbuilder/LICENSE",
+    "node_modules/xmlbuilder/lib/index.js",
   ]) assert.ok(paths.has(expected), `npm archive is missing ${expected}`);
+  assert.ok(!paths.has("src/portal-lease.js"), "the separate portal helper must not ship");
+  assert.ok(!paths.has("src/portal-dbus.cjs"), "the generated D-Bus bundle must not ship");
 
   for (const filePath of paths) {
     assert.ok(!filePath.startsWith("test/"), `npm archive contains ${filePath}`);
@@ -114,6 +132,7 @@ test("the npm archive contains the Codex runtime and excludes repository-only fi
 
   const obsoleteRuntime = /claude|anthropic|AskUserQuestion|StopFailure|CLAUDE_|transcript|(?:rate|usage)[ _-]?limit|auto[ _-]?continue/i;
   for (const filePath of paths) {
+    if (filePath.startsWith("node_modules/")) continue;
     if (!/\.(?:js|json|swift|ps1)$/.test(filePath)) continue;
     const content = readFileSync(path.join(root, filePath), "utf8");
     assert.doesNotMatch(content, obsoleteRuntime, `${filePath} contains obsolete lifecycle logic`);

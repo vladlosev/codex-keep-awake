@@ -1,7 +1,6 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { AppServerObserver } from "./app-server-observer.js";
-import { GnomeInhibitorBackend } from "./backend.js";
+import { CODEX_PORTAL_REASON, PORTAL_BACKEND_ID, PortalInhibitorBackend } from "./backend.js";
 import {
   processIdentityIsAlive,
   processStartToken,
@@ -12,7 +11,7 @@ import {
 const READ_INTERVAL_MS = 1000;
 const CONNECT_RETRY_MS = 2000;
 export const FAILURE_RELEASE_MS = 60_000;
-const leaseScriptPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "lease.js");
+const require = createRequire(import.meta.url);
 
 let stopped = false;
 let timer = null;
@@ -112,7 +111,7 @@ function recordRuntime({ connected, required, backendStatus, now }) {
       const unavailable = Object.values(state.threads).some((thread) => thread.observation !== "observed");
       let degradedReason = null;
       if (unavailable) degradedReason = connected ? "thread_unobservable" : "app_server_unavailable";
-      else if (backendStatus.error) degradedReason = "gnome_inhibitor_unavailable";
+      else if (backendStatus.error) degradedReason = "portal_inhibitor_unavailable";
       state.runtime = {
         appServerConnected: connected,
         automaticPauseResume: connected && !unavailable,
@@ -122,6 +121,8 @@ function recordRuntime({ connected, required, backendStatus, now }) {
           : null,
         protectionRequired: required,
         inhibitionActive: backendStatus.active,
+        inhibitionBackend: PORTAL_BACKEND_ID,
+        inhibitionVerified: false,
         backendError: backendStatus.error,
         updatedAt: now,
       };
@@ -254,11 +255,11 @@ export function runSupervisor(directory, id, options = {}) {
   instanceId = id;
   startupGraceUntil = Date.now() + 1000;
   observer = options.observer ?? new AppServerObserver(options.observerOptions);
-  backend = options.backend ?? new GnomeInhibitorBackend({
-    command: options.inhibitorCommand ?? process.env.CODEX_KEEP_AWAKE_GNOME_INHIBITOR ?? "gnome-session-inhibit",
-    spawnProcess: options.spawnProcess,
-    nodePath: process.execPath,
-    leaseScriptPath,
+  backend = options.backend ?? new PortalInhibitorBackend({
+    dbus: options.dbus ?? (process.env.CODEX_KEEP_AWAKE_TEST_PORTAL_DBUS_MODULE
+      ? require(process.env.CODEX_KEEP_AWAKE_TEST_PORTAL_DBUS_MODULE)
+      : undefined),
+    reason: process.env.CODEX_KEEP_AWAKE_TEST_PORTAL_REASON ?? CODEX_PORTAL_REASON,
   });
   process.on("SIGTERM", finish);
   process.on("SIGINT", finish);

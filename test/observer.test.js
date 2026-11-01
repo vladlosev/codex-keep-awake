@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { closeSync, openSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -98,25 +98,12 @@ function respondToRead(webSocket, message, status = { type: "active", activeFlag
   }
 }
 
-test("app-server waits release GNOME leases and resume before a completion hook", async () => {
+test("app-server waits release portal leases and resume before a completion hook", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "codex-keep-awake-observer-"));
   const socketPath = path.join(dataDir, "app-server.sock");
-  const fakeBin = path.join(dataDir, "bin");
   const markerPath = path.join(dataDir, "inhibitor.active");
-  const argsPath = path.join(dataDir, "inhibitor.args.txt");
+  const reasonPath = path.join(dataDir, "inhibitor.reason.txt");
   const pidPath = path.join(dataDir, "inhibitor.pid");
-  await mkdir(fakeBin);
-
-  const inhibitorScript = path.join(fakeBin, "gnome-session-inhibit");
-  await writeFile(inhibitorScript, `#!/bin/sh
-printf '%s\\n' "$@" > '${argsPath}'
-printf '%s\\n' "$$" > '${pidPath}'
-printf 'held\\n' > '${markerPath}'
-printf 'CODEX_KEEP_AWAKE_LEASE_READY\\n'
-cat >/dev/null
-rm -f '${markerPath}'
-`);
-  await chmod(inhibitorScript, 0o755);
 
   let threadStatus = { type: "active", activeFlags: [] };
   const requests = [];
@@ -142,7 +129,10 @@ rm -f '${markerPath}'
   const threadId = "thr-observer-regression";
   const environment = {
     CODEX_KEEP_AWAKE_SOCKET: socketPath,
-    CODEX_KEEP_AWAKE_GNOME_INHIBITOR: inhibitorScript,
+    CODEX_KEEP_AWAKE_TEST_PORTAL_DBUS_MODULE: path.join(repoRoot, "test", "helpers", "fake-portal-dbus.cjs"),
+    CODEX_KEEP_AWAKE_TEST_PORTAL_MARKER: markerPath,
+    CODEX_KEEP_AWAKE_TEST_PORTAL_REASON_FILE: reasonPath,
+    CODEX_KEEP_AWAKE_TEST_PORTAL_PID_FILE: pidPath,
   };
   try {
     const hook = await runCli(["hook"], dataDir, JSON.stringify({
@@ -158,14 +148,12 @@ rm -f '${markerPath}'
       (state) => state?.runtime?.appServerConnected && state.runtime.inhibitionActive,
     );
     assert.equal(acquired?.runtime?.protectionRequired, true);
+    assert.equal(acquired?.runtime?.inhibitionBackend, "xdg-desktop-portal");
+    assert.equal(acquired?.runtime?.inhibitionVerified, false);
     await waitFor(async () => readFile(markerPath, "utf8").then(() => true).catch(() => false), (exists) => exists);
-    assert.deepEqual((await readFile(argsPath, "utf8")).trimEnd().split("\n"), [
-      "--app-id", "org.openai.Codex.KeepAwake",
-      "--inhibit", "suspend",
-      "--reason", "Codex is running active work",
-      process.execPath,
-      path.join(repoRoot, "src", "lease.js"),
-    ]);
+    assert.equal(await readFile(reasonPath, "utf8"), "Codex is running active work\n");
+    assert.equal(Number(await readFile(pidPath, "utf8")), acquired.supervisor.pid,
+      "the long-lived supervisor owns the portal connection directly");
 
     const approvalStartedAt = Date.now();
     threadStatus = { type: "active", activeFlags: ["waitingOnApproval"] };
@@ -179,7 +167,7 @@ rm -f '${markerPath}'
     assert.equal(waiting?.runtime?.appServerConnected, true);
     const releaseStartedAt = Date.now();
     await waitFor(async () => readFile(markerPath, "utf8").then(() => true).catch(() => false), (exists) => !exists);
-    assert.ok(Date.now() - releaseStartedAt < 2000, "GNOME lease should close within two seconds of an approval wait");
+    assert.ok(Date.now() - releaseStartedAt < 2000, "portal lease should close within two seconds of an approval wait");
 
     // Approval resumes in the app-server before any completion hook arrives.
     const resumeStartedAt = Date.now();
@@ -193,15 +181,10 @@ rm -f '${markerPath}'
     assert.equal(resumed?.threads?.[threadId]?.waiting, null);
     assert.ok(requests.some((message) => message.method === "thread/read" && message.params.includeTurns === false));
 
-    const inhibitorPid = Number(await readFile(pidPath, "utf8"));
     process.kill(resumed.supervisor.pid, "SIGKILL");
-    const leaseReleased = await waitFor(
-      async () => readFile(markerPath, "utf8").then(() => true).catch(() => false),
-      (exists) => !exists,
-    );
-    assert.equal(leaseReleased, false, "supervisor crash should close the lease pipe");
-    const inhibitorExited = await waitFor(() => processIsRunning(inhibitorPid), (running) => !running);
-    assert.equal(inhibitorExited, false, "supervisor crash should not leave an inhibitor process behind");
+    const supervisorRunning = await waitFor(() => processIsRunning(resumed.supervisor.pid), (running) => !running);
+    assert.equal(supervisorRunning, false, "the process owning the portal connection should exit on a crash");
+    await rm(markerPath, { force: true });
     const stoppedStatus = await runCli(["status"], dataDir, "", environment);
     const stoppedResponse = JSON.parse(stoppedStatus.stdout);
     assert.equal(stoppedResponse.running, false);
@@ -308,21 +291,9 @@ test("the observer accepts binary JSON responses from the native client", async 
 
 test("an unobservable session uses hooks and reports unavailable automatic wait handling", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "codex-keep-awake-no-daemon-"));
-  const fakeBin = path.join(dataDir, "bin");
-  const markerPath = path.join(dataDir, "inhibitor.active");
-  await mkdir(fakeBin);
-  const inhibitorScript = path.join(fakeBin, "gnome-session-inhibit");
-  await writeFile(inhibitorScript, `#!/bin/sh
-touch '${markerPath}'
-printf 'CODEX_KEEP_AWAKE_LEASE_READY\\n'
-cat >/dev/null
-rm -f '${markerPath}'
-`);
-  await chmod(inhibitorScript, 0o755);
-
   const environment = {
     CODEX_KEEP_AWAKE_SOCKET: path.join(dataDir, "missing-app-server.sock"),
-    CODEX_KEEP_AWAKE_GNOME_INHIBITOR: inhibitorScript,
+    CODEX_KEEP_AWAKE_TEST_PORTAL_DBUS_MODULE: path.join(repoRoot, "test", "helpers", "fake-portal-dbus.cjs"),
   };
   const threadId = "thread-without-daemon";
   try {
