@@ -85,6 +85,7 @@ test("the npm archive contains the Codex runtime and excludes repository-only fi
 
   for (const expected of [
     "README.md",
+    "docs/desktop-setup.md",
     "LICENSE",
     ".codex-plugin/plugin.json",
     "hooks/hooks.json",

@@ -1,8 +1,13 @@
 # Development guidance
 
-Keep README.md focused on practical user instructions for installing, running,
-inspecting, and removing the distributed Codex plugin. Put development guidance,
-local-checkout workflows, and runtime implementation details in this file.
+Keep README.md focused on user guidance for Codex CLI and OpenCode, including
+requirements, protection behavior, and each host's installation and removal
+steps. Keep OpenCode version-specific configuration and activity expectations
+alongside its installation instructions. Put desktop-specific system setup,
+cleanup, inhibition verification, and troubleshooting in
+[docs/desktop-setup.md](docs/desktop-setup.md), linked from README.md. Put
+development guidance, local-checkout workflows, and runtime implementation
+details in this file.
 
 ## Development setup and checks
 
@@ -47,48 +52,59 @@ codex plugin add codex-keep-awake@codex-keep-awake
 
 Start a new Codex CLI session, enter `/hooks`, then review and trust the
 plugin's hook commands. Codex skips untrusted hooks. See [README.md](README.md)
-for normal operation, inspection, cleanup, and removal.
+for normal operation and removal.
 
 GitHub marketplace installation includes the runtime directly and does not
 require publishing to npm.
 
-## Try the terminal commands from this checkout
+## Codex runtime diagnostics and recovery
 
-Install the package's CLI into npm's global command directory:
+Normal installation and removal use Codex's plugin commands and require no
+global npm CLI. For development diagnostics or recovery, invoke the existing
+runtime script directly from this checkout:
 
 ```sh
-npm install --global --ignore-scripts .
+node scripts/codex-keep-awake.js status
+node scripts/codex-keep-awake.js cleanup
 ```
 
-The `codex-keep-awake status` and `codex-keep-awake cleanup` commands can then
-run from any directory. They query `codex plugin list --json` and invoke the
-active cached plugin version with its private data directory. Install the
-Codex plugin separately using the local marketplace instructions above.
+Without an explicit data directory, these commands query
+`codex plugin list --json` and invoke the active cached plugin version with its
+private data directory. The plugin must still be installed and Codex must be
+on `PATH` for discovery to work.
 
 An explicit `--data-dir` argument or `PLUGIN_DATA` environment variable bypasses
-discovery and operates directly on that directory. Tests must isolate both
+discovery and operates directly on that directory. The normal installed path
+is `${CODEX_HOME:-$HOME/.codex}/plugins/data/codex-keep-awake-codex-keep-awake`.
+Use the same directory as the affected hooks; cleanup of another directory
+does not stop their supervisor. Tests must isolate both
 `CODEX_HOME` and the default home-directory fallback when testing discovery.
 
-## Install the distributed plugin in OpenCode
-
-See [OpenCode installation and removal](docs/opencode.md) for GitHub installation
-and uninstall instructions, version-specific configuration, prerequisites, and
-protection checks. OpenCode V1 uses `plugin` and `opencode plugin`; V2 uses
-`plugins` and `opencode plugin add`, which installs globally.
+On normal Codex exit, the `SessionEnd` hook removes its thread registration.
+When no registered threads remain, the hook signals the shared supervisor to
+exit and release protection. The supervisor is detached; a crash, forced exit,
+or failed end hook can leave it running. Use the recovery command before
+removing the plugin in that case. It clears bookkeeping and signals shutdown,
+but leaves the data directory in place; wait for the supervisor to exit before
+deleting that directory. The diagnostic commands remain available in the
+runtime for tests and recovery, rather than as required user management steps.
 
 ## OpenCode development and compatibility
 
-This checkout does not automatically register the plugin in OpenCode. Use the
-[GitHub installation instructions](docs/opencode.md) to enable it globally or
-for a project. Tests import the package's canonical entrypoint directly.
+For user-facing setup and shared requirements, see [README.md](README.md#opencode).
+Desktop support, MATE setup, native inhibitor checks, and desktop cleanup are
+in [docs/desktop-setup.md](docs/desktop-setup.md).
+This checkout does not automatically register the plugin in OpenCode. Tests
+import the package's canonical entrypoint directly.
 
-OpenCode `1.18.35` and `2.0.29` are the compatibility baselines. The same default
-export provides V1 `server()` hooks and V2 `setup(ctx)` with an event subscription
-and cleanup function. The entrypoint imports no OpenCode API package; both
-versions share the activity tracker and native backends. Root `npm ci` is enough
-for the regular tests; installing dependencies inside `.opencode/` is not a test
-prerequisite. Earlier V1 object entrypoints exist from `1.18.29`, but releases
-below `1.18.35` have not been validated here.
+Use the V1 and V2 compatibility baselines listed in
+[README.md](README.md#opencode) for host checks. The same default export
+provides V1 `server()` hooks and V2 `setup(ctx)` with an event subscription and
+cleanup function. The entrypoint imports no OpenCode API package; both versions
+share the activity tracker and native backends. Root `npm ci` is enough for the
+regular tests; installing dependencies inside `.opencode/` is not a test
+prerequisite. Earlier V1 object entrypoints exist from `1.18.29`, but earlier
+releases below the documented baseline have not been validated here.
 
 The canonical definition lives in `src/opencode-entry.js`. The root package
 exposes it as `codex-keep-awake/server` through `exports["./server"]`. The
@@ -119,20 +135,16 @@ records the procedure and results. Local archive/Git validation is separate
 from installation of an updated remote GitHub revision, which requires that
 revision to be available remotely.
 
-Busy and retrying sessions request suspend inhibition through the XDG Desktop
-Portal. A session waiting for
-permission or an answer releases its own protection, including protection held
-for busy parent sessions; another active session keeps the inhibitor in place.
-Idle, failed, or deleted sessions release their protection. The display may
-still blank and lock normally.
+The shared tracker requests suspend inhibition through the XDG Desktop Portal
+for busy and retrying sessions. Permission and answer waits release protection
+for that session and its busy parents; another active session keeps the shared
+lease. Idle, failed, or deleted sessions release their protection. The display
+may still blank and lock normally. User-facing requirements are in
+[README.md](README.md#requirements); desktop support and live verification
+status are in [docs/desktop-setup.md](docs/desktop-setup.md#desktop-support).
 
-On Linux, OpenCode requires Node.js 24.17.0 or newer within the Node 24 series
-on `PATH`, a session bus, and an XDG Desktop Portal backend that supports
-suspend inhibition. The portal chooses the configured desktop backend. Source
-analysis identifies support in GNOME, KDE Plasma, Cinnamon, and MATE backends;
-live lifecycle verification has been performed on GNOME and Cinnamon. The
-examined Xfce backend does not support suspend inhibition. Portal `Response=0`
-means the portal accepted the request; it does not verify that the desktop power
+The portal selects the configured desktop backend. A portal `Response=0` means
+the portal accepted the request; it does not verify that the desktop power
 manager applied a native inhibitor. The helper reports active only after that
 response, retries unavailable requests every five seconds while work remains
 active, and releases on idle, helper shutdown, or session-bus loss.
