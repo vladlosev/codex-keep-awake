@@ -30,7 +30,7 @@ test("OpenCode selects the Windows execution-state backend for Windows", () => {
 
 test("OpenCode selects an in-process XDG portal backend for Linux", async () => {
   const fake = portalClient();
-  const backend = createOpenCodeBackend("linux", { dbus: fake.dbus });
+  const backend = createOpenCodeBackend("linux", { dbus: fake.dbus, environment: {} });
 
   assert.equal(backend.constructor.name, "PortalInhibitorBackend");
   backend.setRequired(true);

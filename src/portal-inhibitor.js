@@ -1,10 +1,13 @@
 import { randomBytes } from "node:crypto";
+import { ensurePortalDesktopEntry, getPortalAppId } from "./portal-app-registration.js";
 
 const PORTAL_NAME = "org.freedesktop.portal.Desktop";
 const PORTAL_PATH = "/org/freedesktop/portal/desktop";
 const INHIBIT_INTERFACE = "org.freedesktop.portal.Inhibit";
 const REQUEST_INTERFACE = "org.freedesktop.portal.Request";
 const DBUS_INTERFACE = "org.freedesktop.DBus";
+const DBUS_PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties";
+const REGISTRY_INTERFACE = "org.freedesktop.host.portal.Registry";
 const READY_TIMEOUT_MS = 5000;
 const CLOSE_TIMEOUT_MS = 750;
 const CONNECTION_CLOSED = "The session bus connection was lost";
@@ -13,6 +16,8 @@ const PORTAL_REJECTED = "The XDG Desktop Portal rejected suspend inhibition";
 const PORTAL_TIMEOUT = "The XDG Desktop Portal did not respond in time";
 const PORTAL_CANCELLED = "XDG Desktop Portal acquisition was cancelled";
 const PORTAL_UNAVAILABLE = "The XDG Desktop Portal suspend inhibitor is unavailable";
+const PORTAL_DESKTOP_ENTRY_FAILED = "The Codex Keep Awake desktop identity entry could not be prepared";
+const PORTAL_APP_REGISTRATION_FAILED = "The XDG Desktop Portal rejected the Codex Keep Awake app identity";
 
 function failure(code, message) {
   return Object.assign(new Error(message), { code });
@@ -61,6 +66,8 @@ function sanitizeAcquisitionError(error, signal, timedOut) {
   if (error?.code === "PORTAL_OWNER_CHANGED") return failure("PORTAL_OWNER_CHANGED", PORTAL_OWNER_CHANGED);
   if (error?.code === "PORTAL_CONNECTION_CLOSED") return failure("PORTAL_CONNECTION_CLOSED", CONNECTION_CLOSED);
   if (error?.code === "PORTAL_REJECTED") return error;
+  if (error?.code === "PORTAL_DESKTOP_ENTRY_FAILED") return failure("PORTAL_DESKTOP_ENTRY_FAILED", PORTAL_DESKTOP_ENTRY_FAILED);
+  if (error?.code === "PORTAL_APP_REGISTRATION_FAILED") return failure("PORTAL_APP_REGISTRATION_FAILED", PORTAL_APP_REGISTRATION_FAILED);
   return failure("PORTAL_UNAVAILABLE", PORTAL_UNAVAILABLE);
 }
 
@@ -70,6 +77,8 @@ export async function acquirePortalInhibitor({
   signal: callerSignal,
   timeoutMs = READY_TIMEOUT_MS,
   makeToken = () => `codex_keep_awake_${randomBytes(16).toString("hex")}`,
+  platform = process.platform,
+  environment = process.env,
 } = {}) {
   if (!dbus || typeof dbus.sessionBus !== "function" || typeof reason !== "string" || !reason) {
     throw failure("PORTAL_UNAVAILABLE", PORTAL_UNAVAILABLE);
@@ -198,6 +207,58 @@ export async function acquirePortalInhibitor({
     }
     if (typeof portalOwner !== "string" || !portalOwner.startsWith(":")) {
       throw new Error("The XDG Desktop Portal has no unique owner");
+    }
+
+    const appId = getPortalAppId({ platform, environment });
+    if (appId) {
+      let registryVersion = 0;
+      try {
+        const value = await Promise.race([
+          bus.invoke({
+            destination: PORTAL_NAME,
+            path: PORTAL_PATH,
+            interface: DBUS_PROPERTIES_INTERFACE,
+            member: "Get",
+            signature: "ss",
+            body: [REGISTRY_INTERFACE, "version"],
+          }, { signal, timeout: remainingMs(deadline) }),
+          lost,
+          aborted,
+        ]);
+        const unwrapped = typeof dbus.variantValue === "function" ? dbus.variantValue(value) : value?.value ?? value;
+        if (Number.isInteger(unwrapped) && unwrapped > 0) registryVersion = unwrapped;
+      } catch (error) {
+        if (signal.aborted || timedOut()
+          || ["PORTAL_OWNER_CHANGED", "PORTAL_CONNECTION_CLOSED", "PORTAL_TIMEOUT"].includes(error?.code)) {
+          throw error;
+        }
+        // Registry is optional. A missing interface/property or another
+        // Registry lookup failure preserves the existing Inhibit path.
+      }
+
+      if (registryVersion >= 1) {
+        ensurePortalDesktopEntry({ appId, environment });
+        try {
+          await Promise.race([
+            bus.invoke({
+              destination: PORTAL_NAME,
+              path: PORTAL_PATH,
+              interface: REGISTRY_INTERFACE,
+              member: "Register",
+              signature: "sa{sv}",
+              body: [appId, {}],
+            }, { signal, timeout: remainingMs(deadline) }),
+            lost,
+            aborted,
+          ]);
+        } catch (error) {
+          if (signal.aborted || timedOut()
+            || ["PORTAL_OWNER_CHANGED", "PORTAL_CONNECTION_CLOSED", "PORTAL_TIMEOUT"].includes(error?.code)) {
+            throw error;
+          }
+          throw failure("PORTAL_APP_REGISTRATION_FAILED", PORTAL_APP_REGISTRATION_FAILED);
+        }
+      }
     }
 
     const token = makeToken();

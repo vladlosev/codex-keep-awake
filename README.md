@@ -18,6 +18,55 @@ This project is a fork of
 - Allows the display to blank and lock normally
 - Starts automatically; its D-Bus client packages ship with the plugin
 
+### MATE and Cinnamon desktop entry
+
+On MATE and Cinnamon, a portal that provides the Registry API also gets a
+hidden, per-user desktop entry for the extension identity. Codex Keep Awake
+uses its own identity, independent of Codex's app ID, and Codex and OpenCode
+share this entry. It remains after a work session ends. The file is
+`${XDG_DATA_HOME:-$HOME/.local/share}/applications/io.github.vladlosev.CodexKeepAwake.desktop`.
+
+### Enable MATE suspend inhibition
+
+On Ubuntu MATE, install the XApp portal backend if it is not already
+installed:
+
+```sh
+sudo apt install xdg-desktop-portal-xapp
+```
+
+Select XApp for the portal's Inhibit interface by adding these entries to
+`~/.config/xdg-desktop-portal/mate-portals.conf`. Keep any other portal
+preferences already in that file; the Secret entry below preserves MATE's
+GNOME Keyring provider:
+
+```ini
+[preferred]
+default=gtk
+org.freedesktop.impl.portal.Inhibit=xapp
+org.freedesktop.impl.portal.Secret=gnome-keyring
+```
+
+After logging into MATE, restart the XApp backend and portal frontend so XApp
+connects to MATE's running session services:
+
+```sh
+systemctl --user restart xdg-desktop-portal-xapp.service
+systemctl --user restart xdg-desktop-portal.service
+```
+
+In our MATE session, the portal had selected XApp but the backend reported
+`Inhibiting other than idle not supported`. Restarting XApp after MATE's
+session services were available cleared that failure, and MATE's session
+manager received the suspend-inhibit request. During active work, check the
+user journal for new portal errors if inhibition does not appear:
+
+```sh
+journalctl --user -b --no-pager \
+  -u xdg-desktop-portal.service \
+  -u xdg-desktop-portal-xapp.service -n 50
+```
+
 ## Codex CLI
 
 ### Quick Start
@@ -86,6 +135,17 @@ codex plugin marketplace remove codex-keep-awake
 
 Removing a plugin does not delete its private data directory. You can delete
 that directory after cleanup has stopped the plugin.
+
+After uninstalling both integrations and closing their running instances, you
+can remove the MATE/Cinnamon desktop entry. Check its generated-file marker
+before deleting it so an unrelated file with the same name is preserved:
+
+```sh
+desktop_entry="${XDG_DATA_HOME:-$HOME/.local/share}/applications/io.github.vladlosev.CodexKeepAwake.desktop"
+if [ -f "$desktop_entry" ] && grep -Fxq 'X-Codex-Keep-Awake-Generated=true' "$desktop_entry"; then
+  rm -- "$desktop_entry"
+fi
+```
 
 If you installed the optional terminal commands, remove them with:
 
@@ -190,9 +250,9 @@ protection checks above to confirm the OpenCode power request has disappeared.
 
 The portal selects the backend configured for the session. Source analysis
 identifies suspend-capable backends for GNOME, KDE Plasma, Cinnamon, and MATE;
-live desktop verification has been performed on GNOME only. The examined Xfce
-portal backend does not support suspend inhibition. Manual suspend remains
-subject to desktop policy. macOS is not supported.
+live lifecycle verification has been performed on GNOME, KDE Plasma, Cinnamon,
+and MATE. The examined Xfce portal backend does not support suspend inhibition.
+Manual suspend remains subject to desktop policy. macOS is not supported.
 
 ## License
 

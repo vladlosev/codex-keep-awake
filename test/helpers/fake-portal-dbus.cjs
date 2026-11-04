@@ -7,6 +7,7 @@ const markerPath = process.env.CODEX_KEEP_AWAKE_TEST_PORTAL_MARKER;
 const reasonPath = process.env.CODEX_KEEP_AWAKE_TEST_PORTAL_REASON_FILE;
 const pidPath = process.env.CODEX_KEEP_AWAKE_TEST_PORTAL_PID_FILE;
 const portalPath = "/org/freedesktop/portal/desktop";
+const registryVersion = Number.parseInt(process.env.CODEX_KEEP_AWAKE_TEST_PORTAL_REGISTRY_VERSION ?? "0", 10);
 
 class Variant {
   constructor(signature, value) {
@@ -25,6 +26,9 @@ function removeMarker() {
 
 module.exports = {
   Variant,
+  variantValue(value) {
+    return value instanceof Variant ? value.value : value;
+  },
   messageType: { signal: 4 },
   sessionBus() {
     const connection = new EventEmitter();
@@ -44,6 +48,15 @@ module.exports = {
       },
       async invoke(message) {
         calls.push(message);
+        if (message.interface === "org.freedesktop.DBus.Properties" && message.member === "Get") {
+          if (message.body[0] !== "org.freedesktop.host.portal.Registry" || message.body[1] !== "version") {
+            throw new Error(`Unexpected fake property call: ${message.body.join(".")}`);
+          }
+          return new Variant("u", Number.isInteger(registryVersion) ? registryVersion : 0);
+        }
+        if (message.interface === "org.freedesktop.host.portal.Registry" && message.member === "Register") {
+          return undefined;
+        }
         if (message.member === "Inhibit") {
           const reason = message.body[2].reason.value;
           if (reasonPath) writeFileSync(reasonPath, `${reason}\n`, { mode: 0o600 });

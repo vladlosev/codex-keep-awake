@@ -26,7 +26,8 @@ version and the latest Node 24 release.
 The regular test suite uses controlled app-server and inhibitor processes,
 including native WebSocket handshake, message, timeout, retry, and cleanup
 checks. Portal protocol tests use a fake D-Bus client and never connect to the
-desktop session bus. Package validation packs the real archive, installs it
+desktop session bus. They cover MATE/Cinnamon Registry negotiation and desktop
+entry ownership. Package validation packs the real archive, installs it
 offline in a temporary consumer without development dependencies or lifecycle
 scripts, checks the OpenCode entrypoint and idle lifecycles, then uses a private
 D-Bus daemon and fake portal to exercise the installed backend in its host
@@ -129,12 +130,12 @@ On Linux, OpenCode requires Node.js 24.17.0 or newer within the Node 24 series
 on `PATH`, a session bus, and an XDG Desktop Portal backend that supports
 suspend inhibition. The portal chooses the configured desktop backend. Source
 analysis identifies support in GNOME, KDE Plasma, Cinnamon, and MATE backends;
-the live desktop integration has been verified on GNOME only. The examined
-Xfce backend does not support suspend inhibition. Portal `Response=0` means the
-portal accepted the request; it does not verify that the desktop power manager
-applied a native inhibitor. The helper reports active only after that response,
-retries unavailable requests every five seconds while work remains active, and
-releases on idle, helper shutdown, or session-bus loss.
+live lifecycle verification has been performed on GNOME and Cinnamon. The
+examined Xfce backend does not support suspend inhibition. Portal `Response=0`
+means the portal accepted the request; it does not verify that the desktop power
+manager applied a native inhibitor. The helper reports active only after that
+response, retries unavailable requests every five seconds while work remains
+active, and releases on idle, helper shutdown, or session-bus loss.
 
 Run `npm test` for event and lifecycle checks. On GNOME,
 `npm run test:opencode-gnome` checks that real native inhibition follows busy,
@@ -222,3 +223,20 @@ that the selected desktop backend applied native inhibition. OpenCode also
 supports its Windows execution-state backend; the macOS helper remains
 inactive. The vendored D-Bus packages retain their original license notices and
 upstream attribution in `node_modules/`.
+
+On Linux, app registration is enabled only when an exact token in
+`XDG_CURRENT_DESKTOP` or `XDG_SESSION_DESKTOP` identifies MATE (`mate`,
+`ubuntu-mate`) or Cinnamon (`cinnamon`, `x-cinnamon`). Each new portal
+connection checks `org.freedesktop.host.portal.Registry.version`; when it is
+at least 1, the client creates or refreshes the marked
+`io.github.vladlosev.CodexKeepAwake.desktop` file under the user's applications
+directory, then calls `Registry.Register(sa{sv})` before `Inhibit` on that same
+connection. A missing Registry API or version 0 keeps the existing Inhibit path
+and creates no file. Explicit file preparation or registration failures close
+the connection and use the normal retry policy with fixed sanitized messages.
+Run `node --test test/portal-app-registration.test.js test/portal-inhibit.test.js`
+for the focused coverage and `npm run validate:package` for the packed private
+D-Bus checks. To confirm real XApp inhibition, inspect the session manager's
+native inhibitor list during active work and after a wait or idle transition;
+portal acceptance and `systemd-inhibit --list` alone do not establish that
+XApp applied a session inhibitor.

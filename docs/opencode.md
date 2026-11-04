@@ -18,9 +18,16 @@ without it fail with a missing plugin entrypoint error.
 
 The portal chooses the backend configured for the session. Source analysis
 identifies suspend-capable backends for GNOME, KDE Plasma, Cinnamon, and MATE;
-live desktop verification has been performed on GNOME only. The examined Xfce
-portal backend does not support suspend inhibition. macOS is unsupported. Live
-Windows inhibition has not been verified on a Windows host.
+live lifecycle verification has been performed on GNOME and Cinnamon. The
+examined Xfce portal backend does not support suspend inhibition. macOS is
+unsupported. Live Windows inhibition has not been verified on a Windows host.
+
+On MATE and Cinnamon, if the portal provides its Registry API, the plugin
+creates a hidden per-user desktop entry for `io.github.vladlosev.CodexKeepAwake`
+before requesting inhibition. Codex Keep Awake has an identity separate from
+Codex's own app ID, and its Codex and OpenCode integrations share the entry.
+It remains after individual sessions end. Its path is
+`${XDG_DATA_HOME:-$HOME/.local/share}/applications/io.github.vladlosev.CodexKeepAwake.desktop`.
 
 OpenCode installs the package directly from GitHub. No npm publication,
 separate `npm install`, OpenCode API package, or build command is required.
@@ -150,6 +157,17 @@ protection held by an already loaded copy. Use the
 [protection checks](#verify-protection) to confirm the OpenCode power request has
 disappeared. Cached package downloads can remain; deleting them is not required
 to stop loading the plugin.
+
+After uninstalling both Codex and OpenCode integrations and closing their
+running instances, remove the MATE/Cinnamon entry only if its generated-file
+marker is present:
+
+```sh
+desktop_entry="${XDG_DATA_HOME:-$HOME/.local/share}/applications/io.github.vladlosev.CodexKeepAwake.desktop"
+if [ -f "$desktop_entry" ] && grep -Fxq 'X-Codex-Keep-Awake-Generated=true' "$desktop_entry"; then
+  rm -- "$desktop_entry"
+fi
+```
 
 Choose one installation route per project. Development and test guidance is in
 [AGENTS.md](../AGENTS.md#opencode-development-and-compatibility).

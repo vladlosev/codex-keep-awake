@@ -8,6 +8,7 @@ test("portal backend owns the D-Bus lease in-process until protection is no long
   const backend = new PortalInhibitorBackend({
     dbus: fake.dbus,
     reason: "OpenCode is running active work",
+    environment: {},
   });
 
   backend.setRequired(true);
@@ -37,6 +38,7 @@ test("portal backend retries a rejected request while work remains active", asyn
   const backend = new PortalInhibitorBackend({
     dbus: fake.dbus,
     reason: "Codex is running active work",
+    environment: {},
     retryDelayMs: 10,
   });
 
@@ -58,6 +60,7 @@ test("portal backend reacquires inhibition after the portal owner changes", asyn
   const backend = new PortalInhibitorBackend({
     dbus: fake.dbus,
     reason: "Codex is running active work",
+    environment: {},
     retryDelayMs: 10,
   });
 
@@ -80,6 +83,7 @@ for (const event of ["close", "error"]) {
     const backend = new PortalInhibitorBackend({
       dbus: fake.dbus,
       reason: "Codex is running active work",
+      environment: {},
       retryDelayMs: 10,
     });
 
@@ -102,6 +106,7 @@ test("portal backend cancels an in-flight request and releases its connection wh
   const backend = new PortalInhibitorBackend({
     dbus: fake.dbus,
     reason: "Codex is running active work",
+    environment: {},
   });
 
   backend.setRequired(true);
@@ -118,6 +123,7 @@ test("portal backend reports unsupported platforms without opening a D-Bus conne
   const backend = new PortalInhibitorBackend({
     platform: "win32",
     reason: "Codex is running active work",
+    environment: {},
   });
 
   backend.setRequired(true);

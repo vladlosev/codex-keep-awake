@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -142,23 +142,44 @@ test("packed Linux backend owns the portal request directly and releases it on c
 
   const logPath = path.join(directory, "portal-events.jsonl");
   const dbusEnv = { ...process.env, DBUS_SESSION_BUS_ADDRESS: address };
-  const service = spawn(process.execPath, [path.join(root, "test", "helpers", "fake-portal-service.cjs")], {
-    stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true,
-    env: { ...dbusEnv, CODEX_KEEP_AWAKE_TEST_PORTAL_LOG: logPath },
-  });
-  let serviceStderr = "";
-  service.stderr.setEncoding("utf8").on("data", (chunk) => { serviceStderr += chunk; });
+  const services = [];
+  const startService = async (registryVersion) => {
+    const record = { child: null, stderr: "" };
+    record.child = spawn(process.execPath, [path.join(root, "test", "helpers", "fake-portal-service.cjs")], {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+      env: {
+        ...dbusEnv,
+        CODEX_KEEP_AWAKE_TEST_PORTAL_LOG: logPath,
+        CODEX_KEEP_AWAKE_TEST_REGISTRY_VERSION: registryVersion,
+      },
+    });
+    record.child.stderr.setEncoding("utf8").on("data", (chunk) => { record.stderr += chunk; });
+    services.push(record);
+    await waitForLine(record.child, "FAKE_PORTAL_READY");
+    return record;
+  };
+  const stopService = async (record) => {
+    if (record.child.exitCode === null && record.child.signalCode === null) record.child.kill("SIGTERM");
+    await waitForClose(record.child).catch(() => {});
+  };
   t.after(async () => {
-    if (service.exitCode === null) service.kill("SIGTERM");
-    await waitForClose(service).catch(() => {});
+    await Promise.all(services.map(stopService));
   });
-  await waitForLine(service, "FAKE_PORTAL_READY");
+  let service = await startService("1");
 
+  const registeredDataHome = path.join(directory, "registered-xdg-data");
+  const hostEnv = {
+    ...dbusEnv,
+    HOME: path.join(directory, "home"),
+    XDG_DATA_HOME: registeredDataHome,
+    XDG_CURRENT_DESKTOP: "MATE",
+    XDG_SESSION_DESKTOP: "",
+  };
   const host = spawn(process.execPath, [probePath, "Packed portal backend test"], {
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
-    env: dbusEnv,
+    env: hostEnv,
   });
   let hostStderr = "";
   host.stderr.setEncoding("utf8").on("data", (chunk) => { hostStderr += chunk; });
@@ -171,6 +192,23 @@ test("packed Linux backend owns the portal request directly and releases it on c
   assert.equal(acquired.flags, 4);
   assert.equal(acquired.reason, "Packed portal backend test");
   assert.ok(acquired.path.endsWith(`/${acquired.token}`));
+  const eventsAfterAcquire = logEvents(logPath);
+  const registered = eventsAfterAcquire.find((event) => event.type === "register" && event.sender === acquired.sender);
+  assert.deepEqual(registered, {
+    type: "register",
+    appId: "io.github.vladlosev.CodexKeepAwake",
+    options: {},
+    sender: acquired.sender,
+  });
+  const registrationEventIndex = eventsAfterAcquire.findIndex((event) => event.type === "register" && event.sender === acquired.sender);
+  const inhibitEventIndex = eventsAfterAcquire.findIndex((event) => event.type === "inhibit" && event.sender === acquired.sender);
+  assert.ok(registrationEventIndex < inhibitEventIndex);
+  const desktopEntry = readFileSync(path.join(registeredDataHome, "applications", "io.github.vladlosev.CodexKeepAwake.desktop"), "utf8");
+  assert.match(desktopEntry, /^Type=Application$/m);
+  assert.match(desktopEntry, /^Name=Codex Keep Awake Extension$/m);
+  assert.match(desktopEntry, /^Terminal=true$/m);
+  assert.match(desktopEntry, /^NoDisplay=true$/m);
+  assert.match(desktopEntry, /^X-Codex-Keep-Awake-Generated=true$/m);
   assert.equal(host.exitCode, null, "the host process must keep its D-Bus request alive");
 
   host.stdin.end();
@@ -182,7 +220,7 @@ test("packed Linux backend owns the portal request directly and releases it on c
   const crashedHost = spawn(process.execPath, [probePath, "Portal host crash test"], {
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
-    env: dbusEnv,
+    env: hostEnv,
   });
   t.after(async () => {
     if (crashedHost.exitCode === null) crashedHost.kill("SIGKILL");
@@ -200,5 +238,61 @@ test("packed Linux backend owns the portal request directly and releases it on c
     "portal-side request cleanup after host crash",
   );
   assert.equal(disconnected.sender, crashRequest.sender);
-  assert.equal(service.exitCode, null, serviceStderr);
+  assert.equal(service.child.exitCode, null, service.stderr);
+
+  const gnomeDataHome = path.join(directory, "gnome-xdg-data");
+  const gnomeHost = spawn(process.execPath, [probePath, "Packed GNOME fallback test"], {
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+    env: {
+      ...dbusEnv,
+      HOME: path.join(directory, "gnome-home"),
+      XDG_DATA_HOME: gnomeDataHome,
+      XDG_CURRENT_DESKTOP: "GNOME",
+      XDG_SESSION_DESKTOP: "",
+    },
+  });
+  t.after(async () => {
+    if (gnomeHost.exitCode === null) gnomeHost.kill("SIGKILL");
+    await waitForClose(gnomeHost).catch(() => {});
+  });
+  await waitForLine(gnomeHost, "PORTAL_BACKEND_ACTIVE");
+  const gnomeRequest = await waitFor(
+    () => logEvents(logPath).find((event) => event.type === "inhibit" && event.reason === "Packed GNOME fallback test"),
+    "GNOME fallback Inhibit call",
+  );
+  assert.equal(logEvents(logPath).some((event) => event.type === "register" && event.sender === gnomeRequest.sender), false);
+  assert.equal(existsSync(path.join(gnomeDataHome, "applications")), false);
+  gnomeHost.stdin.end();
+  await waitForClose(gnomeHost);
+  assert.equal(gnomeHost.exitCode, 0);
+
+  await stopService(service);
+  service = await startService("none");
+  const unsupportedDataHome = path.join(directory, "unsupported-xdg-data");
+  const unsupportedHost = spawn(process.execPath, [probePath, "Packed MATE Registry fallback test"], {
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+    env: {
+      ...dbusEnv,
+      HOME: path.join(directory, "unsupported-home"),
+      XDG_DATA_HOME: unsupportedDataHome,
+      XDG_CURRENT_DESKTOP: "MATE",
+      XDG_SESSION_DESKTOP: "",
+    },
+  });
+  t.after(async () => {
+    if (unsupportedHost.exitCode === null) unsupportedHost.kill("SIGKILL");
+    await waitForClose(unsupportedHost).catch(() => {});
+  });
+  await waitForLine(unsupportedHost, "PORTAL_BACKEND_ACTIVE");
+  const unsupportedRequest = await waitFor(
+    () => logEvents(logPath).find((event) => event.type === "inhibit" && event.reason === "Packed MATE Registry fallback test"),
+    "MATE fallback Inhibit call",
+  );
+  assert.equal(logEvents(logPath).some((event) => event.type === "register" && event.sender === unsupportedRequest.sender), false);
+  assert.equal(existsSync(path.join(unsupportedDataHome, "applications")), false);
+  unsupportedHost.stdin.end();
+  await waitForClose(unsupportedHost);
+  assert.equal(unsupportedHost.exitCode, 0);
 });

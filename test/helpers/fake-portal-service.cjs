@@ -5,7 +5,10 @@ const { appendFileSync } = require("node:fs");
 
 const PORTAL_NAME = "org.freedesktop.portal.Desktop";
 const PORTAL_PATH = "/org/freedesktop/portal/desktop";
+const REGISTRY_INTERFACE = "org.freedesktop.host.portal.Registry";
 const logPath = process.env.CODEX_KEEP_AWAKE_TEST_PORTAL_LOG;
+const registrySetting = process.env.CODEX_KEEP_AWAKE_TEST_REGISTRY_VERSION ?? "0";
+const registryVersion = Number.parseInt(registrySetting, 10);
 const bus = dbus.sessionBus({ timeout: 5000 });
 const requests = new Map();
 
@@ -54,10 +57,27 @@ const portal = dbus.defineInterface({
   },
 });
 
+const registry = registrySetting === "none" ? null : dbus.defineInterface({
+  name: REGISTRY_INTERFACE,
+  properties: {
+    version: { type: "u", access: "read", value: Number.isInteger(registryVersion) ? registryVersion : 0 },
+  },
+  methods: {
+    Register: {
+      in: { app_id: "s", options: "a{sv}" },
+      out: {},
+      handler({ app_id, options }, { sender }) {
+        record({ type: "register", appId: app_id, options, sender });
+      },
+    },
+  },
+});
+
 async function start() {
   const nameResult = await bus.requestName(PORTAL_NAME, 0);
   if (nameResult !== 1 && nameResult !== 4) throw new Error("Could not own the fake portal name");
   await bus.export(PORTAL_PATH, portal);
+  if (registry) await bus.export(PORTAL_PATH, registry);
   await bus.addMatch("type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged'");
   bus.connection.on("message", (message) => {
     if (message.interface !== "org.freedesktop.DBus"

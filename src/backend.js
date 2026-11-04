@@ -14,12 +14,14 @@ export class PortalInhibitorBackend {
     dbus,
     reason,
     platform = process.platform,
+    environment = process.env,
     retryDelayMs = DEFAULT_RETRY_DELAY_MS,
     acquisitionTimeoutMs = DEFAULT_ACQUISITION_TIMEOUT_MS,
   } = {}) {
     this.dbus = dbus;
     this.reason = reason;
     this.platform = platform;
+    this.environment = environment;
     this.retryDelayMs = retryDelayMs;
     this.acquisitionTimeoutMs = acquisitionTimeoutMs;
     this.backend = PORTAL_BACKEND_ID;
@@ -92,6 +94,8 @@ export class PortalInhibitorBackend {
       reason: this.reason,
       signal: controller.signal,
       timeoutMs: this.acquisitionTimeoutMs,
+      platform: this.platform,
+      environment: this.environment,
     }));
     this.acquiring = acquiring;
     void acquiring.then((lease) => {
