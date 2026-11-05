@@ -9,6 +9,13 @@ cleanup, inhibition verification, and troubleshooting in
 development guidance, local-checkout workflows, and runtime implementation
 details in this file.
 
+Documents under `docs/superpowers/plans/` are historical implementation plans
+and validation records. They may contain outdated instructions, paths,
+dependencies, and unfinished checklists for work that has since been completed.
+Use them as background; verify their applicability against the current code
+and documentation. Their old constraints and checklists do not override current
+guidance or create new implementation tasks.
+
 ## Development setup and checks
 
 Use Node.js 24.17.0 or newer within the Node 24 series (`^24.17.0`). From the
@@ -37,6 +44,46 @@ offline in a temporary consumer without development dependencies or lifecycle
 scripts, checks the OpenCode entrypoint and idle lifecycles, then uses a private
 D-Bus daemon and fake portal to exercise the installed backend in its host
 process. The vendored packages have no build or generated-bundle step.
+
+Use this guide to choose checks and interpret their results:
+
+| Check | When to run it | Prerequisites and coverage |
+| --- | --- | --- |
+| `npm test` | After runtime or test changes; before handing off a change | Supported Node and root development dependencies. Controlled processes and fake portal clients verify activity, transport, state, and cleanup without the desktop bus. The PowerShell parser check runs only on Windows. |
+| `npm run validate:package` | After packaging, runtime, or distributed-documentation changes | Root dependencies and npm. Packs and installs the archive offline, then checks installed entrypoints and lifecycles. The private portal test requires Linux and `dbus-daemon`; it is skipped otherwise. A passing command with that skip does not verify the packed portal backend. |
+| `node --test test/portal-app-registration.test.js test/portal-inhibit.test.js` | While changing portal registration or protocol handling | Supported Node and root dependencies. Fake D-Bus checks verify registration, ownership, request ordering, failure handling, and cleanup without the desktop bus. |
+| `npm run test:gnome` | After Codex activity or Linux inhibition changes, on GNOME | A logged-in GNOME session, working portal, and `gnome-session-inhibit`. Requires no pre-existing inhibitor with the test's `Codex portal integration probe` reason. Exercises the real native inhibitor through a controlled app-server. See [Codex Linux portal integration checks](#codex-linux-portal-integration-checks) for the optional timed hold. |
+| `npm run test:opencode-gnome` | After OpenCode activity or Linux inhibition changes, on GNOME | The same desktop prerequisites and no pre-existing OpenCode Keep Awake inhibitor. Injects events through both adapters and checks native acquisition and release; preserves Codex inhibitors. |
+| Actual OpenCode host checks | After changing host compatibility, package loading, or installation instructions | The pinned hosts, disposable configuration, and a synthetic provider described [below](#opencode-development-and-compatibility). These verify real host loading and behavior, separately from injected-event desktop tests. |
+
+Report skipped or unavailable checks explicitly. A protocol test, packed import,
+or portal acceptance is not evidence that a desktop applied a native inhibitor.
+
+## Source map
+
+| Area | Files to inspect |
+| --- | --- |
+| Codex hooks, state, and process ownership | [hooks/hooks.json](hooks/hooks.json), [src/hook-runtime.js](src/hook-runtime.js), [src/state.js](src/state.js) |
+| Codex observation and protection lifecycle | [src/app-server-observer.js](src/app-server-observer.js), [src/unix-websocket.js](src/unix-websocket.js), [src/supervisor.js](src/supervisor.js) |
+| Runtime commands and installed-plugin discovery | [scripts/codex-keep-awake.js](scripts/codex-keep-awake.js), [src/cli.js](src/cli.js), [src/installed-plugin.js](src/installed-plugin.js) |
+| OpenCode entrypoint, shared activity, and backend selection | [src/opencode-entry.js](src/opencode-entry.js), [src/opencode-plugin.js](src/opencode-plugin.js), [src/opencode-activity.js](src/opencode-activity.js), [src/opencode-backend.js](src/opencode-backend.js) |
+| OpenCode V2 event translation and observation | [src/opencode-v2-events.js](src/opencode-v2-events.js), [src/opencode-v2-plugin.js](src/opencode-v2-plugin.js) |
+| Linux portal acquisition and app registration | [src/backend.js](src/backend.js), [src/portal-inhibitor.js](src/portal-inhibitor.js), [src/portal-app-registration.js](src/portal-app-registration.js) |
+| Windows and retained macOS helpers | [src/windows-backend.js](src/windows-backend.js), [src/lease-backend.js](src/lease-backend.js), [src/windows-keep-awake.ps1](src/windows-keep-awake.ps1), [src/macos-keep-awake.swift](src/macos-keep-awake.swift) |
+| Distribution and archive validation | [package.json](package.json), [.codex-plugin/plugin.json](.codex-plugin/plugin.json), [.agents/plugins/marketplace.json](.agents/plugins/marketplace.json), [test/package.test.js](test/package.test.js), [test/opencode-package.test.js](test/opencode-package.test.js), [test/portal-package.test.js](test/portal-package.test.js) |
+
+## Runtime change rules
+
+- Keep Codex hooks advisory and within their three-second timeout. Return `{}`
+  or an informational `systemMessage`; do not change approval decisions.
+- Keep state private. Use the existing exclusive locks and atomic writes for
+  updates so concurrent hooks cannot lose registrations or start duplicate
+  supervisors. Preserve checks that prevent stale events clearing newer work.
+- Verify process identity, including its start token, before signaling a
+  supervisor. A PID alone does not establish ownership because it can be reused.
+- Reduce events to the identifiers and activity state the tracker needs. Do not
+  retain prompts, commands, transcripts, answers, credentials, or raw events in
+  state or logs. Keep failure messages sanitized.
 
 ## Install this checkout in Codex CLI
 
@@ -69,9 +116,9 @@ node scripts/codex-keep-awake.js cleanup
 ```
 
 Without an explicit data directory, these commands query
-`codex plugin list --json` and invoke the active cached plugin version with its
-private data directory. The plugin must still be installed and Codex must be
-on `PATH` for discovery to work.
+`codex plugin list --marketplace codex-keep-awake --json` and invoke the active
+cached plugin version with its private data directory. The plugin must still
+be installed and Codex must be on `PATH` for discovery to work.
 
 An explicit `--data-dir` argument or `PLUGIN_DATA` environment variable bypasses
 discovery and operates directly on that directory. The normal installed path
@@ -127,11 +174,17 @@ For actual package-host checks, use the pinned binaries by absolute path with
 separate temporary HOME, XDG config/data/state/cache, and npm/Git configuration.
 Install a full revision of a disposable Git repository containing the packed
 artifact, then run each host's private loopback server with a local synthetic
-provider. Confirm the cached package is loaded and its own helper acquires and
-releases inhibition. Preserve pre-existing inhibitors and stop all probe-owned
-processes before removing fixtures. The
+provider. Confirm the loaded module path belongs to that host's private package
+cache. On Linux, the OpenCode host owns the portal connection directly; there
+is no separate Linux inhibitor helper to identify. Check that host's native
+inhibitor during work, waits, resumption, completion, and host shutdown. On
+Windows, identify the package-owned PowerShell helper and check its system
+power request through the same transitions. Preserve pre-existing inhibitors
+and stop and await all probe-owned hosts, providers, and Windows helpers before
+removing fixtures. The
 [GitHub installation plan](docs/superpowers/plans/2026-10-15-opencode-github-installation.md)
-records the procedure and results. Local archive/Git validation is separate
+records historical procedures and results; adapt its old helper-based checks
+to the current ownership described here. Local archive/Git validation is separate
 from installation of an updated remote GitHub revision, which requires that
 revision to be available remotely.
 
@@ -145,9 +198,9 @@ status are in [docs/desktop-setup.md](docs/desktop-setup.md#desktop-support).
 
 The portal selects the configured desktop backend. A portal `Response=0` means
 the portal accepted the request; it does not verify that the desktop power
-manager applied a native inhibitor. The helper reports active only after that
+manager applied a native inhibitor. The backend reports active only after that
 response, retries unavailable requests every five seconds while work remains
-active, and releases on idle, helper shutdown, or session-bus loss.
+active, and releases on idle, host shutdown, or session-bus loss.
 
 Run `npm test` for event and lifecycle checks. On GNOME,
 `npm run test:opencode-gnome` checks that real native inhibition follows busy,
@@ -179,11 +232,10 @@ finishes or is interrupted and the old generation can unload.
 On Windows, the same OpenCode plugin holds a PowerShell lease that calls
 `SetThreadExecutionState` with `ES_CONTINUOUS | ES_SYSTEM_REQUIRED` during
 active work, then clears it when work pauses or finishes. It does not request
-that the display stay on. During a live OpenCode session, `powercfg /requests`
-shows the active Windows power requests; check again after a permission wait or
-idle state to confirm the lease was released. The Windows backend uses the
-built-in `powershell.exe` and adds no npm dependencies. The test suite parses
-the helper with PowerShell when run on Windows.
+that the display stay on. User verification is described in
+[README.md](README.md#verify-protection). The Windows backend uses the built-in
+`powershell.exe` and adds no npm dependencies. The test suite parses the helper
+with PowerShell when run on Windows.
 
 ## Codex Linux portal integration checks
 
@@ -204,6 +256,11 @@ power settings.
 
 Concurrent Codex threads and subagents share one supervisor and inhibitor;
 OpenCode sessions share the desktop inhibitor while any session remains active.
+
+Normal daemon discovery uses `codex app-server daemon version`.
+`CODEX_KEEP_AWAKE_SOCKET` overrides the socket path for isolated probes or
+diagnostics. Treat `Stop` as a completion hint: another hook can continue work,
+and observed app-server status remains authoritative when available.
 
 With the normal app-server daemon, the observer reads thread status once per
 second and releases protection for `waitingOnApproval` and

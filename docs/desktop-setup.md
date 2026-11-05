@@ -121,11 +121,41 @@ installed:
 sudo apt install xdg-desktop-portal-xapp
 ```
 
-Select XApp for the portal's Inhibit interface by adding these entries to
-`~/.config/xdg-desktop-portal/mate-portals.conf`. Create the parent directory
-if needed, and use `$XDG_CONFIG_HOME` instead of `~/.config` if customized.
-For an existing file, edit its `[preferred]` section and keep other portal
-preferences; the Secret entry below preserves MATE's GNOME Keyring provider:
+Select XApp for suspend inhibition in your user MATE portal configuration.
+The following variables use your custom `XDG_CONFIG_HOME` when set:
+
+```sh
+portal_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/xdg-desktop-portal"
+portal_config="$portal_config_dir/mate-portals.conf"
+```
+
+#### If the configuration file already exists
+
+Back it up before editing. The `-i` option asks before replacing an existing
+backup; choose another backup name if you need to preserve an earlier copy:
+
+```sh
+cp -p -i -- "$portal_config" "$portal_config.before-keep-awake"
+```
+
+In the file's existing `[preferred]` section, add or change only this line:
+
+```ini
+org.freedesktop.impl.portal.Inhibit=xapp
+```
+
+Create the `[preferred]` section if it is absent. Keep all other settings,
+including any existing `default` and `Secret` preferences.
+
+#### If the configuration file does not exist
+
+Create the directory:
+
+```sh
+mkdir -p -- "$portal_config_dir"
+```
+
+Create `mate-portals.conf` in that directory with this configuration:
 
 ```ini
 [preferred]
@@ -133,6 +163,13 @@ default=gtk
 org.freedesktop.impl.portal.Inhibit=xapp
 org.freedesktop.impl.portal.Secret=gnome-keyring
 ```
+
+Here, GTK handles interfaces without an explicit choice, XApp handles suspend
+inhibition, and GNOME Keyring handles stored secrets. If your distribution's
+MATE portal configuration specifies additional preferences, carry those into
+the new file too; a user configuration can override the system configuration.
+
+#### Apply the configuration
 
 After logging into MATE, restart the XApp backend and portal frontend so XApp
 connects to MATE's running session services. Run these commands as your desktop
@@ -148,6 +185,31 @@ describes backend selection and configuration-file precedence.
 
 After setup, follow [Inhibition checks](#inhibition-checks) to verify the
 native request.
+
+### Undo the MATE portal configuration change
+
+If you edited an existing file and have made no other changes since setup,
+restore the backup below. Use your chosen backup filename if you used another
+name. If you changed other preferences after making the backup, restore only
+the old Inhibit preference by hand so those later edits are preserved.
+
+```sh
+portal_config="${XDG_CONFIG_HOME:-$HOME/.config}/xdg-desktop-portal/mate-portals.conf"
+cp -p -i -- "$portal_config.before-keep-awake" "$portal_config"
+```
+
+If you created the file during setup, inspect it first. If it still contains
+only this setup's configuration, remove it to restore system defaults:
+
+```sh
+portal_config="${XDG_CONFIG_HOME:-$HOME/.config}/xdg-desktop-portal/mate-portals.conf"
+rm -i -- "$portal_config"
+```
+
+Restart the XApp backend and portal frontend using the commands under
+[Apply the configuration](#apply-the-configuration). Keep the XApp package if
+other applications use it. Removing this portal override is separate from
+[removing the plugin's shared desktop entry](#remove-the-shared-desktop-entry).
 
 ### Troubleshoot MATE inhibition
 
